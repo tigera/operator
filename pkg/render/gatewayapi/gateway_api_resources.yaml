@@ -21175,58 +21175,6 @@ status:
   storedVersions: null
 ---
 #
-# config/crd/experimental/gateway.networking.k8s.io_vap_safeupgrades.yaml
-#
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicy
-metadata:
-  annotations:
-    gateway.networking.k8s.io/bundle-version: v1.5.0-dev
-    gateway.networking.k8s.io/channel: standard
-  name: "safe-upgrades.gateway.networking.k8s.io"
-spec:
-  failurePolicy: Fail
-  matchConstraints:
-    resourceRules:
-    - apiGroups:   ["apiextensions.k8s.io"]
-      apiVersions: ["v1"]
-      operations:  ["CREATE", "UPDATE"]
-      resources:   ["*"]
-  validations:
-    - expression: "object.spec.group != 'gateway.networking.k8s.io' || oldObject == null || (
-        has(object.metadata.annotations) && object.metadata.annotations.exists(k, k == 'gateway.networking.k8s.io/channel') && 
-        object.metadata.annotations['gateway.networking.k8s.io/channel'] == 'standard' ) || (
-        oldObject != null && has(oldObject.metadata.annotations) && oldObject.metadata.annotations.exists(k, k == 'gateway.networking.k8s.io/channel') && 
-        oldObject.metadata.annotations['gateway.networking.k8s.io/channel'] == 'experimental' )"
-      message: "Installing experimental CRDs on top of standard channel CRDs is prohibited by default. Uninstall ValidatingAdmissionPolicy safe-upgrades.gateway.networking.k8s.io to install experimental CRDs on top of standard channel CRDs."
-      reason: Invalid
-    - expression: "object.spec.group != 'gateway.networking.k8s.io' ||
-        (has(object.metadata.annotations) && object.metadata.annotations.exists(k, k == 'gateway.networking.k8s.io/bundle-version') &&
-        !matches(object.metadata.annotations['gateway.networking.k8s.io/bundle-version'], 'v1.[0-4].\\\\d+') &&
-        !matches(object.metadata.annotations['gateway.networking.k8s.io/bundle-version'], 'v0'))" #TODO Kubernetes 1.37: Migrate to kubernetes semver library
-      message: "Installing CRDs with version before v1.5.0 is prohibited by default. Uninstall ValidatingAdmissionPolicy safe-upgrades.gateway.networking.k8s.io to install older versions."
-      reason: Invalid
-
----
-
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingAdmissionPolicyBinding
-metadata:
-  annotations:
-    gateway.networking.k8s.io/bundle-version: v1.5.0-dev
-    gateway.networking.k8s.io/channel: standard
-  name: safe-upgrades.gateway.networking.k8s.io
-spec:
-  policyName: safe-upgrades.gateway.networking.k8s.io
-  validationActions: [Deny]
-  matchResources:
-    resourceRules:
-    - apiGroups:   ["apiextensions.k8s.io"]
-      apiVersions: ["v1"]
-      resources:   ["customresourcedefinitions"]
-      operations:  ["CREATE", "UPDATE"]
----
-#
 # config/crd/experimental/gateway.networking.x-k8s.io_xbackendtrafficpolicies.yaml
 #
 apiVersion: apiextensions.k8s.io/v1
@@ -22335,8 +22283,39 @@ spec:
                     description: |-
                       Ciphers specifies the set of cipher suites supported when
                       negotiating TLS 1.0 - 1.2. This setting has no effect for TLS 1.3.
-                      For the list of supported ciphers, please refer to the Envoy documentation:
+                      For Envoy TLS cipher suite configuration semantics and default cipher
+                      lists, see the Envoy documentation:
                       https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/transport_sockets/tls/v3/common.proto#extensions-transport-sockets-tls-v3-tlsparameters
+                      Supported cipher suite names:
+                      - ECDHE-ECDSA-AES128-GCM-SHA256
+                      - ECDHE-RSA-AES128-GCM-SHA256
+                      - ECDHE-ECDSA-AES256-GCM-SHA384
+                      - ECDHE-RSA-AES256-GCM-SHA384
+                      - ECDHE-ECDSA-CHACHA20-POLY1305
+                      - ECDHE-RSA-CHACHA20-POLY1305
+                      - ECDHE-ECDSA-AES128-SHA
+                      - ECDHE-RSA-AES128-SHA
+                      - AES128-GCM-SHA256
+                      - AES128-SHA
+                      - ECDHE-ECDSA-AES256-SHA
+                      - ECDHE-RSA-AES256-SHA
+                      - AES256-GCM-SHA384
+                      - AES256-SHA
+                      Supported IANA/RFC aliases:
+                      - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+                      - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+                      - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+                      - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+                      - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+                      - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+                      - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+                      - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+                      - TLS_RSA_WITH_AES_128_GCM_SHA256
+                      - TLS_RSA_WITH_AES_128_CBC_SHA
+                      - TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+                      - TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+                      - TLS_RSA_WITH_AES_256_GCM_SHA384
+                      - TLS_RSA_WITH_AES_256_CBC_SHA
                       In non-FIPS Envoy Proxy builds the default cipher list is:
                       - [ECDHE-ECDSA-AES128-GCM-SHA256|ECDHE-ECDSA-CHACHA20-POLY1305]
                       - [ECDHE-RSA-AES128-GCM-SHA256|ECDHE-RSA-CHACHA20-POLY1305]
@@ -24357,7 +24336,7 @@ spec:
                                   description: |-
                                     Requests is the number of requests (or cost units, when used with
                                     cost-based rate limiting) allowed per Unit.
-                                  format: int32
+                                  format: int64
                                   maximum: 4294967295
                                   minimum: 1
                                   type: integer
@@ -24741,7 +24720,7 @@ spec:
                                   description: |-
                                     Requests is the number of requests (or cost units, when used with
                                     cost-based rate limiting) allowed per Unit.
-                                  format: int32
+                                  format: int64
                                   maximum: 4294967295
                                   minimum: 1
                                   type: integer
@@ -27555,8 +27534,39 @@ spec:
                     description: |-
                       Ciphers specifies the set of cipher suites supported when
                       negotiating TLS 1.0 - 1.2. This setting has no effect for TLS 1.3.
-                      For the list of supported ciphers, please refer to the Envoy documentation:
+                      For Envoy TLS cipher suite configuration semantics and default cipher
+                      lists, see the Envoy documentation:
                       https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/transport_sockets/tls/v3/common.proto#extensions-transport-sockets-tls-v3-tlsparameters
+                      Supported cipher suite names:
+                      - ECDHE-ECDSA-AES128-GCM-SHA256
+                      - ECDHE-RSA-AES128-GCM-SHA256
+                      - ECDHE-ECDSA-AES256-GCM-SHA384
+                      - ECDHE-RSA-AES256-GCM-SHA384
+                      - ECDHE-ECDSA-CHACHA20-POLY1305
+                      - ECDHE-RSA-CHACHA20-POLY1305
+                      - ECDHE-ECDSA-AES128-SHA
+                      - ECDHE-RSA-AES128-SHA
+                      - AES128-GCM-SHA256
+                      - AES128-SHA
+                      - ECDHE-ECDSA-AES256-SHA
+                      - ECDHE-RSA-AES256-SHA
+                      - AES256-GCM-SHA384
+                      - AES256-SHA
+                      Supported IANA/RFC aliases:
+                      - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+                      - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+                      - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+                      - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+                      - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+                      - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+                      - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+                      - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+                      - TLS_RSA_WITH_AES_128_GCM_SHA256
+                      - TLS_RSA_WITH_AES_128_CBC_SHA
+                      - TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+                      - TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+                      - TLS_RSA_WITH_AES_256_GCM_SHA384
+                      - TLS_RSA_WITH_AES_256_CBC_SHA
                       In non-FIPS Envoy Proxy builds the default cipher list is:
                       - [ECDHE-ECDSA-AES128-GCM-SHA256|ECDHE-ECDSA-CHACHA20-POLY1305]
                       - [ECDHE-RSA-AES128-GCM-SHA256|ECDHE-RSA-CHACHA20-POLY1305]
@@ -30277,8 +30287,9 @@ spec:
                                 kubebuilder:validation:Pattern=`^[a-f0-9]{64}$`
                               type: string
                             tls:
-                              description: TLS configuration when connecting to the
-                                Wasm code source.
+                              description: |-
+                                TLS configuration when connecting to the Wasm code source.
+                                If unset, system trust store is used for HTTPS url.
                               properties:
                                 caCertificateRef:
                                   description: |-
@@ -30400,8 +30411,9 @@ spec:
                                 kubebuilder:validation:Pattern=`^[a-f0-9]{64}$`
                               type: string
                             tls:
-                              description: TLS configuration when connecting to the
-                                Wasm code source.
+                              description: |-
+                                TLS configuration when connecting to the Wasm code source.
+                                If unset, system trust store is used.
                               properties:
                                 caCertificateRef:
                                   description: |-
@@ -31491,8 +31503,39 @@ spec:
                     description: |-
                       Ciphers specifies the set of cipher suites supported when
                       negotiating TLS 1.0 - 1.2. This setting has no effect for TLS 1.3.
-                      For the list of supported ciphers, please refer to the Envoy documentation:
+                      For Envoy TLS cipher suite configuration semantics and default cipher
+                      lists, see the Envoy documentation:
                       https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/transport_sockets/tls/v3/common.proto#extensions-transport-sockets-tls-v3-tlsparameters
+                      Supported cipher suite names:
+                      - ECDHE-ECDSA-AES128-GCM-SHA256
+                      - ECDHE-RSA-AES128-GCM-SHA256
+                      - ECDHE-ECDSA-AES256-GCM-SHA384
+                      - ECDHE-RSA-AES256-GCM-SHA384
+                      - ECDHE-ECDSA-CHACHA20-POLY1305
+                      - ECDHE-RSA-CHACHA20-POLY1305
+                      - ECDHE-ECDSA-AES128-SHA
+                      - ECDHE-RSA-AES128-SHA
+                      - AES128-GCM-SHA256
+                      - AES128-SHA
+                      - ECDHE-ECDSA-AES256-SHA
+                      - ECDHE-RSA-AES256-SHA
+                      - AES256-GCM-SHA384
+                      - AES256-SHA
+                      Supported IANA/RFC aliases:
+                      - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+                      - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+                      - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+                      - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+                      - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+                      - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+                      - TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA
+                      - TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
+                      - TLS_RSA_WITH_AES_128_GCM_SHA256
+                      - TLS_RSA_WITH_AES_128_CBC_SHA
+                      - TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA
+                      - TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA
+                      - TLS_RSA_WITH_AES_256_GCM_SHA384
+                      - TLS_RSA_WITH_AES_256_CBC_SHA
                       In non-FIPS Envoy Proxy builds the default cipher list is:
                       - [ECDHE-ECDSA-AES128-GCM-SHA256|ECDHE-ECDSA-CHACHA20-POLY1305]
                       - [ECDHE-RSA-AES128-GCM-SHA256|ECDHE-RSA-CHACHA20-POLY1305]
@@ -32541,7 +32584,6 @@ spec:
                                       procMount denotes the type of proc mount to use for the containers.
                                       The default value is Default which uses the container runtime defaults for
                                       readonly paths and masked paths.
-                                      This requires the ProcMountType feature flag to be enabled.
                                       Note that this field cannot be set when spec.os.name is windows.
                                     type: string
                                   readOnlyRootFilesystem:
@@ -35142,7 +35184,7 @@ spec:
                                         A failure to resolve or pull the image during pod startup will block containers from starting and may add significant latency. Failures will be retried using normal volume backoff and will be reported on the pod reason and message.
                                         The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field.
                                         The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images.
-                                        The volume will be mounted read-only (ro) and non-executable files (noexec).
+                                        The volume will be mounted read-only (ro).
                                         Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33.
                                         The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.
                                       properties:
@@ -35316,8 +35358,7 @@ spec:
                                       description: |-
                                         portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
                                         Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-                                        are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
-                                        is on.
+                                        are redirected to the pxd.portworx.com CSI driver.
                                       properties:
                                         fsType:
                                           description: |-
@@ -36550,7 +36591,6 @@ spec:
                                       procMount denotes the type of proc mount to use for the containers.
                                       The default value is Default which uses the container runtime defaults for
                                       readonly paths and masked paths.
-                                      This requires the ProcMountType feature flag to be enabled.
                                       Note that this field cannot be set when spec.os.name is windows.
                                     type: string
                                   readOnlyRootFilesystem:
@@ -37863,7 +37903,6 @@ spec:
                                         procMount denotes the type of proc mount to use for the containers.
                                         The default value is Default which uses the container runtime defaults for
                                         readonly paths and masked paths.
-                                        This requires the ProcMountType feature flag to be enabled.
                                         Note that this field cannot be set when spec.os.name is windows.
                                       type: string
                                     readOnlyRootFilesystem:
@@ -40702,7 +40741,7 @@ spec:
                                         A failure to resolve or pull the image during pod startup will block containers from starting and may add significant latency. Failures will be retried using normal volume backoff and will be reported on the pod reason and message.
                                         The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field.
                                         The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images.
-                                        The volume will be mounted read-only (ro) and non-executable files (noexec).
+                                        The volume will be mounted read-only (ro).
                                         Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33.
                                         The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.
                                       properties:
@@ -40876,8 +40915,7 @@ spec:
                                       description: |-
                                         portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
                                         Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-                                        are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
-                                        is on.
+                                        are redirected to the pxd.portworx.com CSI driver.
                                       properties:
                                         fsType:
                                           description: |-
@@ -41777,8 +41815,11 @@ spec:
                             type: object
                         type: object
                       envoyHpa:
-                        description: EnvoyHpa defines the Horizontal Pod Autoscaler
-                          settings for Envoy Proxy Deployment.
+                        description: |-
+                          EnvoyHpa defines the Horizontal Pod Autoscaler settings for Envoy Proxy Deployment.
+                          If the HPA is set, the Replicas field from EnvoyDeployment will be ignored, and the
+                          number of replicas is solely managed by the HPA. Use MinReplicas to control the
+                          lower bound of the replica count instead.
                         properties:
                           behavior:
                             description: |-
@@ -50115,33 +50156,45 @@ spec:
                     items:
                       description: |-
                         ExtractFrom is where to fetch the key from the coming request.
-                        Only one of header, param or cookie is supposed to be specified.
+                        Only one of headers, params or cookies must be specified.
                       properties:
                         cookies:
                           description: |-
                             Cookies is the names of the cookie to fetch the key from.
                             If multiple cookies are specified, envoy will look for the api key in the order of the list.
-                            This field is optional, but only one of headers, params or cookies is supposed to be specified.
+                            This field is optional, but only one of headers, params or cookies must be specified.
                           items:
+                            minLength: 1
                             type: string
+                          minItems: 1
                           type: array
                         headers:
                           description: |-
                             Headers is the names of the header to fetch the key from.
                             If multiple headers are specified, envoy will look for the api key in the order of the list.
-                            This field is optional, but only one of headers, params or cookies is supposed to be specified.
+                            This field is optional, but only one of headers, params or cookies must be specified.
                           items:
+                            minLength: 1
                             type: string
+                          minItems: 1
                           type: array
                         params:
                           description: |-
                             Params is the names of the query parameter to fetch the key from.
                             If multiple params are specified, envoy will look for the api key in the order of the list.
-                            This field is optional, but only one of headers, params or cookies is supposed to be specified.
+                            This field is optional, but only one of headers, params or cookies must be specified.
                           items:
+                            minLength: 1
                             type: string
+                          minItems: 1
                           type: array
                       type: object
+                      x-kubernetes-validations:
+                      - message: exactly one of headers, params, or cookies must be
+                          specified
+                        rule: '(has(self.headers) ? 1 : 0) + (has(self.params) ? 1
+                          : 0) + (has(self.cookies) ? 1 : 0) == 1'
+                    minItems: 1
                     type: array
                   forwardClientIDHeader:
                     description: |-
@@ -56913,7 +56966,7 @@ spec:
                           Issuer MUST be a URI RFC 3986 [RFC3986] with a scheme component that MUST
                           be https, a host component, and optionally, port and path components and
                           no query or fragment components.
-                        minLength: 1
+                        pattern: ^https://[^/?#@]+(/[^?#]*)?$
                         type: string
                       tokenEndpoint:
                         description: |-
@@ -57587,10 +57640,10 @@ metadata:
   name: envoy-gateway
   namespace: tigera-gateway
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
 ---
 # Source: gateway-helm/templates/envoy-gateway-config.yaml
@@ -57600,10 +57653,10 @@ metadata:
   name: envoy-gateway-config
   namespace: tigera-gateway
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
 data:
   envoy-gateway.yaml: |
@@ -57619,7 +57672,7 @@ data:
       kubernetes:
         rateLimitDeployment:
           container:
-            image: docker.io/envoyproxy/ratelimit:ff287602
+            image: docker.io/envoyproxy/ratelimit:8fe6ea42
           patch:
             type: StrategicMerge
             value:
@@ -57630,7 +57683,7 @@ data:
                     - imagePullPolicy: IfNotPresent
                       name: envoy-ratelimit
         shutdownManager:
-          image: docker.io/envoyproxy/gateway:v1.8.0
+          image: docker.io/envoyproxy/gateway:v1.8.4
       type: Kubernetes
 ---
 # Source: gateway-helm/templates/envoy-gateway-rbac.yaml
@@ -57640,10 +57693,10 @@ metadata:
   creationTimestamp: null
   name: tigera-gateway-api-gateway-helm-envoy-gateway-role
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -57779,10 +57832,10 @@ kind: ClusterRoleBinding
 metadata:
   name: tigera-gateway-api-gateway-helm-envoy-gateway-rolebinding
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -57800,10 +57853,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-infra-manager
   namespace: tigera-gateway
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -57863,10 +57916,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-leader-election-role
   namespace: tigera-gateway
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -57908,10 +57961,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-infra-manager
   namespace: tigera-gateway
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -57929,10 +57982,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-leader-election-rolebinding
   namespace: tigera-gateway
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -57951,10 +58004,10 @@ metadata:
   namespace: tigera-gateway
   labels:
     control-plane: envoy-gateway
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
 spec:
   type: ClusterIP
@@ -57987,10 +58040,10 @@ metadata:
   namespace: tigera-gateway
   labels:
     control-plane: envoy-gateway
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
 spec:
   replicas: 1
@@ -58021,7 +58074,7 @@ spec:
               fieldPath: metadata.namespace
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: cluster.local
-        image: docker.io/envoyproxy/gateway:v1.8.0
+        image: docker.io/envoyproxy/gateway:v1.8.4
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -58083,6 +58136,58 @@ spec:
         secret:
           secretName: envoy-gateway
 ---
+# Source: gateway-helm/charts/crds/templates/gatewayapi-safe-upgrade-policy.yaml
+#
+# config/crd/experimental/gateway.networking.k8s.io_vap_safeupgrades.yaml
+#
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  annotations:
+    gateway.networking.k8s.io/bundle-version: v1.5.0-dev
+    gateway.networking.k8s.io/channel: standard
+  name: "safe-upgrades.gateway.networking.k8s.io"
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups:   ["apiextensions.k8s.io"]
+      apiVersions: ["v1"]
+      operations:  ["CREATE", "UPDATE"]
+      resources:   ["*"]
+  validations:
+    - expression: "object.spec.group != 'gateway.networking.k8s.io' || oldObject == null || (
+        has(object.metadata.annotations) && object.metadata.annotations.exists(k, k == 'gateway.networking.k8s.io/channel') && 
+        object.metadata.annotations['gateway.networking.k8s.io/channel'] == 'standard' ) || (
+        oldObject != null && has(oldObject.metadata.annotations) && oldObject.metadata.annotations.exists(k, k == 'gateway.networking.k8s.io/channel') && 
+        oldObject.metadata.annotations['gateway.networking.k8s.io/channel'] == 'experimental' )"
+      message: "Installing experimental CRDs on top of standard channel CRDs is prohibited by default. Uninstall ValidatingAdmissionPolicy safe-upgrades.gateway.networking.k8s.io to install experimental CRDs on top of standard channel CRDs."
+      reason: Invalid
+    - expression: "object.spec.group != 'gateway.networking.k8s.io' ||
+        (has(object.metadata.annotations) && object.metadata.annotations.exists(k, k == 'gateway.networking.k8s.io/bundle-version') &&
+        !matches(object.metadata.annotations['gateway.networking.k8s.io/bundle-version'], 'v1.[0-4].\\\\d+') &&
+        !matches(object.metadata.annotations['gateway.networking.k8s.io/bundle-version'], 'v0'))" #TODO Kubernetes 1.37: Migrate to kubernetes semver library
+      message: "Installing CRDs with version before v1.5.0 is prohibited by default. Uninstall ValidatingAdmissionPolicy safe-upgrades.gateway.networking.k8s.io to install older versions."
+      reason: Invalid
+---
+# Source: gateway-helm/charts/crds/templates/gatewayapi-safe-upgrade-policy.yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  annotations:
+    gateway.networking.k8s.io/bundle-version: v1.5.0-dev
+    gateway.networking.k8s.io/channel: standard
+  name: safe-upgrades.gateway.networking.k8s.io
+spec:
+  policyName: safe-upgrades.gateway.networking.k8s.io
+  validationActions: [Deny]
+  matchResources:
+    resourceRules:
+    - apiGroups:   ["apiextensions.k8s.io"]
+      apiVersions: ["v1"]
+      resources:   ["customresourcedefinitions"]
+      operations:  ["CREATE", "UPDATE"]
+---
 # Source: gateway-helm/templates/certgen-rbac.yaml
 apiVersion: v1
 kind: ServiceAccount
@@ -58090,10 +58195,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: tigera-gateway
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -58105,10 +58210,10 @@ kind: ClusterRole
 metadata:
   name: 'tigera-gateway-api-gateway-helm-certgen:tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -58138,10 +58243,10 @@ kind: ClusterRoleBinding
 metadata:
   name: 'tigera-gateway-api-gateway-helm-certgen:tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -58162,10 +58267,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: tigera-gateway
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -58187,10 +58292,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: tigera-gateway
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -58211,10 +58316,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: tigera-gateway
   labels:
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -58239,7 +58344,7 @@ spec:
               fieldPath: metadata.namespace
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: cluster.local
-        image: docker.io/envoyproxy/gateway:v1.8.0
+        image: docker.io/envoyproxy/gateway:v1.8.4
         imagePullPolicy: IfNotPresent
         name: envoy-gateway-certgen
         securityContext:
@@ -58269,10 +58374,10 @@ metadata:
     "helm.sh/hook-weight": "-1"
   labels:
     app.kubernetes.io/component: topology-injector
-    helm.sh/chart: gateway-helm-v1.8.0
+    helm.sh/chart: gateway-helm-v1.8.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.8.0"
+    app.kubernetes.io/version: "v1.8.4"
     app.kubernetes.io/managed-by: Helm
 webhooks:
   - name: topology.webhook.gateway.envoyproxy.io

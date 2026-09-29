@@ -922,7 +922,7 @@ spec:
                 flowLogsDynamicAggregationEnabled:
                   description:
                     FlowLogsDynamicAggregationEnabled is used to enable/disable
-                    dynamically changing aggregation levels. Default is true.
+                    dynamically changing aggregation levels. Default is false.
                   type: boolean
                 flowLogsEnableHostEndpoint:
                   description:

@@ -46,12 +46,12 @@ components:
     image: tigera/dex
     version: v3.22.7
   eck-kibana:
-    version: 8.19.20
+    version: 8.19.22
   kibana:
     image: tigera/kibana
     version: v3.22.7
   eck-elasticsearch:
-    version: 8.19.20
+    version: 8.19.22
   elasticsearch:
     image: tigera/elasticsearch
     version: v3.22.7
@@ -106,7 +106,7 @@ components:
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
-    version: v3.13.2
+    version: v3.13.3
   prometheus:
     image: tigera/prometheus
     version: v3.22.7

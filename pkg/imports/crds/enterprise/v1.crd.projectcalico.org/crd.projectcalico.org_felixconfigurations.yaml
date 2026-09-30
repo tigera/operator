@@ -105,6 +105,7 @@ spec:
                     [Default: unset - means logs are emitted when BPFLogLevel id debug and BPFLogFilters not set.]
                   type: string
                 bpfConnectTimeLoadBalancing:
+                  default: TCP
                   description: |-
                     BPFConnectTimeLoadBalancing when in BPF mode, controls whether Felix installs the connect-time load
                     balancer. The connect-time load balancer is required for the host to be able to reach Kubernetes services
@@ -322,6 +323,7 @@ spec:
                     workloads and services. [Default: true - bypass Linux conntrack]
                   type: boolean
                 bpfHostNetworkedNATWithoutCTLB:
+                  default: Enabled
                   description: |-
                     BPFHostNetworkedNATWithoutCTLB when in BPF mode, controls whether Felix does a NAT without CTLB. This along with BPFConnectTimeLoadBalancing
                     determines the CTLB behavior. [Default: Enabled]
@@ -956,6 +958,7 @@ spec:
                   pattern: ^([a-zA-Z0-9-_]+=([^=]+),)*([a-zA-Z0-9-_]+=([^=]+))?$
                   type: string
                 floatingIPs:
+                  default: Disabled
                   description: |-
                     FloatingIPs configures whether or not Felix will program non-OpenStack floating IP addresses.  (OpenStack-derived
                     floating IPs are always programmed, regardless of this setting.)
@@ -1911,6 +1914,7 @@ spec:
                     like Application layer policy. [Default: Empty]
                   type: string
                 programClusterRoutes:
+                  default: EnabledIPIPOnly
                   description: |-
                     ProgramClusterRoutes controls which "cluster routes" Felix programs, i.e. the routes that
                     a node needs in order to reach workloads on other nodes.  It only applies to IP Pools

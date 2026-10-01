@@ -221,6 +221,7 @@ var _ = Describe("dex rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.OIDCSecretName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: pullSecretName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.DexNamespace}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.ManagerNamespace}},
 			}
 
 			rtest.ExpectResources(resources, expectedResources)
@@ -328,6 +329,7 @@ var _ = Describe("dex rendering tests", func() {
 					&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
 					&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: pullSecretName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.DexNamespace}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.ManagerNamespace}},
 					&csisecret.SecretProviderClass{ObjectMeta: metav1.ObjectMeta{Name: render.OIDCSecretName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "SecretProviderClass", APIVersion: "secrets-store.csi.x-k8s.io/v1"}},
 				}
 
@@ -438,6 +440,7 @@ var _ = Describe("dex rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: pullSecretName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex:csr-creator"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.DexNamespace}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.ManagerNamespace}},
 			}
 
 			rtest.ExpectResources(resources, expectedResources)

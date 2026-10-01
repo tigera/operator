@@ -13,6 +13,7 @@ spec:
     shortNames:
       - sgnp
     singular: stagedglobalnetworkpolicy
+  preserveUnknownFields: false
   scope: Cluster
   versions:
     - additionalPrinterColumns:

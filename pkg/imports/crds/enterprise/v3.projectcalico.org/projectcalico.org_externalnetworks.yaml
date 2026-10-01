@@ -11,6 +11,7 @@ spec:
     listKind: ExternalNetworkList
     plural: externalnetworks
     singular: externalnetwork
+  preserveUnknownFields: false
   scope: Cluster
   versions:
     - name: v3

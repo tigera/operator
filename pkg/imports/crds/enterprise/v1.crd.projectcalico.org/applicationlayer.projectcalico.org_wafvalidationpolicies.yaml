@@ -13,6 +13,7 @@ spec:
     shortNames:
       - wafvp
     singular: wafvalidationpolicy
+  preserveUnknownFields: false
   scope: Namespaced
   versions:
     - additionalPrinterColumns:
@@ -185,6 +186,7 @@ spec:
                   enum:
                     - Compliant
                     - Warning
+                    - Degraded
                     - Critical
                   type: string
                 validationResults:

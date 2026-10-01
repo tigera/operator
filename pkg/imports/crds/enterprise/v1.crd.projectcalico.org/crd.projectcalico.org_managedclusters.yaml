@@ -11,6 +11,7 @@ spec:
     listKind: ManagedClusterList
     plural: managedclusters
     singular: managedcluster
+  preserveUnknownFields: false
   scope: Cluster
   versions:
     - additionalPrinterColumns:

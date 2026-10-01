@@ -14,6 +14,7 @@ spec:
       - gnp
       - cgnp
     singular: globalnetworkpolicy
+  preserveUnknownFields: false
   scope: Cluster
   versions:
     - additionalPrinterColumns:

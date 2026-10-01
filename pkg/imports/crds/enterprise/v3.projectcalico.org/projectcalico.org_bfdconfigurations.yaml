@@ -11,6 +11,7 @@ spec:
     listKind: BFDConfigurationList
     plural: bfdconfigurations
     singular: bfdconfiguration
+  preserveUnknownFields: false
   scope: Cluster
   versions:
     - name: v3

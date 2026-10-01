@@ -1,53 +1,53 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/calico.go.tpl
-title: release-v3.33
+title: v3.33.0
 components:
   libcalico-go:
-    version: release-v3.33
+    version: v3.33.0
   typha:
-    version: release-v3.33
+    version: v3.33.0
   node:
-    version: release-v3.33
+    version: v3.33.0
   cni:
-    version: release-v3.33
+    version: v3.33.0
   node-windows:
-    version: release-v3.33
+    version: v3.33.0
   cni-windows:
-    version: release-v3.33
+    version: v3.33.0
   third-party-cni-plugins:
-    version: release-v3.33
+    version: v3.33.0
   kube-controllers:
-    version: release-v3.33
+    version: v3.33.0
   goldmane:
-    version: release-v3.33
+    version: v3.33.0
   flexvol:
-    version: release-v3.33
+    version: v3.33.0
   apiserver:
-    version: release-v3.33
+    version: v3.33.0
   csi:
-    version: release-v3.33
+    version: v3.33.0
   key-cert-provisioner:
-    version: release-v3.33
+    version: v3.33.0
   whisker:
-    version: release-v3.33
+    version: v3.33.0
   whisker-backend:
-    version: release-v3.33
+    version: v3.33.0
   envoy-gateway:
-    version: release-v3.33
+    version: v3.33.0
   envoy-proxy:
-    version: release-v3.33
+    version: v3.33.0
   envoy-ratelimit:
-    version: release-v3.33
+    version: v3.33.0
   guardian:
-    version: release-v3.33
+    version: v3.33.0
   istio-pilot:
-    version: release-v3.33
+    version: v3.33.0
   istio-install-cni:
-    version: release-v3.33
+    version: v3.33.0
   istio-ztunnel:
-    version: release-v3.33
+    version: v3.33.0
   istio-proxyv2:
-    version: release-v3.33
+    version: v3.33.0
   webhooks:
-    version: release-v3.33
+    version: v3.33.0
   calico:
-    version: release-v3.33
+    version: v3.33.0

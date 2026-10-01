@@ -11,6 +11,7 @@ spec:
     listKind: BGPFilterList
     plural: bgpfilters
     singular: bgpfilter
+  preserveUnknownFields: false
   scope: Cluster
   versions:
     - name: v3

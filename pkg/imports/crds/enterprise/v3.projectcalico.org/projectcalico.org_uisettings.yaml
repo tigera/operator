@@ -11,6 +11,7 @@ spec:
     listKind: UISettingsList
     plural: uisettings
     singular: uisettings
+  preserveUnknownFields: false
   scope: Cluster
   versions:
     - name: v3
@@ -340,6 +341,5 @@ spec:
           type: object
       selectableFields:
         - jsonPath: .spec.group
-        - jsonPath: .spec.user
       served: true
       storage: true

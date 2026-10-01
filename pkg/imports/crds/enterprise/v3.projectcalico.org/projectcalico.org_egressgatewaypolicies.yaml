@@ -11,6 +11,7 @@ spec:
     listKind: EgressGatewayPolicyList
     plural: egressgatewaypolicies
     singular: egressgatewaypolicy
+  preserveUnknownFields: false
   scope: Cluster
   versions:
     - name: v3

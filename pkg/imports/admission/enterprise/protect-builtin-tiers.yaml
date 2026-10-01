@@ -1,3 +1,4 @@
+---
 # ValidatingAdmissionPolicy that prevents deletion of the built-in Calico tiers
 # (default, adminnetworkpolicy, baselineadminnetworkpolicy). These tiers are
 # required for correct operation and should never be deleted.

@@ -3059,7 +3059,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		installation.Spec.Variant = operator.CalicoEnterprise
 
 		Expect(r.updateMutatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
-		Expect(componentHandler.objectsToCreate).To(HaveLen(6))
+		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
 	})
 })
 

@@ -14,6 +14,7 @@ spec:
       - affinity
       - affinities
     singular: blockaffinity
+  preserveUnknownFields: false
   scope: Cluster
   versions:
     - additionalPrinterColumns:

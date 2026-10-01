@@ -11,6 +11,7 @@ spec:
     listKind: DeepPacketInspectionList
     plural: deeppacketinspections
     singular: deeppacketinspection
+  preserveUnknownFields: false
   scope: Namespaced
   versions:
     - name: v1

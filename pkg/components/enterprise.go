@@ -18,10 +18,10 @@
 package components
 
 var (
-	EnterpriseRelease string = "master"
+	EnterpriseRelease string = "v3.24.0-1.0"
 
 	ComponentTigeraCalico = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "calico",
 		Registry:  "",
 		imagePath: "",
@@ -29,7 +29,7 @@ var (
 	}
 
 	ComponentDeepPacketInspection = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "deep-packet-inspection",
 		Registry:  "",
 		imagePath: "",
@@ -47,7 +47,7 @@ var (
 	}
 
 	ComponentElasticTseeInstaller = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "intrusion-detection-job-installer",
 		Registry:  "",
 		imagePath: "",
@@ -55,7 +55,7 @@ var (
 	}
 
 	ComponentElasticsearch = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "elasticsearch",
 		Registry:  "",
 		imagePath: "",
@@ -68,7 +68,7 @@ var (
 	}
 
 	ComponentElasticsearchOperator = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "eck-operator",
 		Registry:  "",
 		imagePath: "",
@@ -76,7 +76,7 @@ var (
 	}
 
 	ComponentFluentBit = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "fluent-bit",
 		Registry:  "",
 		imagePath: "",
@@ -84,7 +84,7 @@ var (
 	}
 
 	ComponentFluentBitWindows = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "fluent-bit-windows",
 		Registry:  "",
 		imagePath: "",
@@ -92,7 +92,7 @@ var (
 	}
 
 	ComponentIntrusionDetectionController = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "intrusion-detection-controller",
 		Registry:  "",
 		imagePath: "",
@@ -100,7 +100,7 @@ var (
 	}
 
 	ComponentKibana = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "kibana",
 		Registry:  "",
 		imagePath: "",
@@ -108,7 +108,7 @@ var (
 	}
 
 	ComponentManager = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "manager",
 		Registry:  "",
 		imagePath: "",
@@ -116,7 +116,7 @@ var (
 	}
 
 	ComponentDex = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "dex",
 		Registry:  "",
 		imagePath: "",
@@ -124,7 +124,7 @@ var (
 	}
 
 	ComponentEgressGateway = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "egress-gateway",
 		Registry:  "",
 		imagePath: "",
@@ -132,14 +132,14 @@ var (
 	}
 
 	ComponentGatewayL7Collector = Component{
-		Version:  "master",
+		Version:  "v3.24.0-1.0",
 		Image:    "gateway-l7-collector",
 		Registry: "",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentEnvoyProxy = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "envoy",
 		Registry:  "",
 		imagePath: "",
@@ -147,7 +147,7 @@ var (
 	}
 
 	ComponentDikastes = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "dikastes",
 		Registry:  "",
 		imagePath: "",
@@ -160,7 +160,7 @@ var (
 	}
 
 	ComponentPrometheus = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "prometheus",
 		Registry:  "",
 		imagePath: "",
@@ -173,7 +173,7 @@ var (
 	}
 
 	ComponentPrometheusAlertmanager = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "alertmanager",
 		Registry:  "",
 		imagePath: "",
@@ -181,7 +181,7 @@ var (
 	}
 
 	ComponentTigeraNode = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "node",
 		Registry:  "",
 		imagePath: "",
@@ -189,7 +189,7 @@ var (
 	}
 
 	ComponentTigeraNodeWindows = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "node-windows",
 		Registry:  "",
 		imagePath: "",
@@ -197,7 +197,7 @@ var (
 	}
 
 	ComponentTigeraCNIWindows = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "cni-windows",
 		Registry:  "",
 		imagePath: "",
@@ -205,7 +205,7 @@ var (
 	}
 
 	ComponentTigeraCNIPlugins = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "third-party-cni-plugins",
 		Registry:  "",
 		imagePath: "",
@@ -213,7 +213,7 @@ var (
 	}
 
 	ComponentGatewayAPIEnvoyGateway = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "envoy-gateway",
 		Registry:  "",
 		imagePath: "",
@@ -221,7 +221,7 @@ var (
 	}
 
 	ComponentGatewayAPIEnvoyProxy = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "envoy-proxy",
 		Registry:  "",
 		imagePath: "",
@@ -229,7 +229,7 @@ var (
 	}
 
 	ComponentGatewayAPIEnvoyRatelimit = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0",
 		Image:     "envoy-ratelimit",
 		Registry:  "",
 		imagePath: "",
@@ -237,28 +237,28 @@ var (
 	}
 
 	ComponentIstioPilot = Component{
-		Version:  "master",
+		Version:  "v3.24.0-1.0",
 		Image:    "istio-pilot",
 		Registry: "",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentIstioInstallCNI = Component{
-		Version:  "master",
+		Version:  "v3.24.0-1.0",
 		Image:    "istio-install-cni",
 		Registry: "",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentIstioZTunnel = Component{
-		Version:  "master",
+		Version:  "v3.24.0-1.0",
 		Image:    "istio-ztunnel",
 		Registry: "",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentIstioProxyv2 = Component{
-		Version:  "master",
+		Version:  "v3.24.0-1.0",
 		Image:    "istio-proxyv2",
 		Registry: "",
 		variant:  enterpriseVariant,

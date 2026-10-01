@@ -11,6 +11,7 @@ spec:
     listKind: CalicoNodeStatusList
     plural: caliconodestatuses
     singular: caliconodestatus
+  preserveUnknownFields: false
   scope: Cluster
   versions:
     - name: v1
@@ -61,8 +62,6 @@ spec:
                     UpdatePeriodSeconds is the period at which CalicoNodeStatus should be updated.
                     Set to 0 to disable CalicoNodeStatus refresh. Maximum update period is one day.
                   format: int32
-                  maximum: 86400
-                  minimum: 0
                   type: integer
               type: object
             status:

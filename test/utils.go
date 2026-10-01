@@ -169,6 +169,13 @@ func (n nodeListWatch) Watch(options metav1.ListOptions) (watch.Interface, error
 	return n.cs.CoreV1().Nodes().Watch(context.Background(), options)
 }
 
+// The fake clientset's watch never emits the Bookmark event that ends a
+// streaming list, so a reflector using WatchList semantics waits for it
+// forever. WatchListClient defaults on from client-go 1.35.
+func (n nodeListWatch) IsWatchListSemanticsUnSupported() bool {
+	return true
+}
+
 // Mock a cache.ListWatcher for nodes to use in the test as there is no other suitable
 // mock available in the fake packages.
 // Ref: https://github.com/kubernetes/client-go/issues/352#issuecomment-614740790
@@ -186,6 +193,10 @@ func (t typhaListWatch) List(options metav1.ListOptions) (runtime.Object, error)
 
 func (t typhaListWatch) Watch(options metav1.ListOptions) (watch.Interface, error) {
 	return t.cs.AppsV1().Deployments("calico-system").Watch(context.Background(), options)
+}
+
+func (t typhaListWatch) IsWatchListSemanticsUnSupported() bool {
+	return true
 }
 
 func CreateNode(c kubernetes.Interface, name string, labels map[string]string, annotations map[string]string) *corev1.Node {

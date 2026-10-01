@@ -8,7 +8,7 @@ require (
 	github.com/containernetworking/cni v1.2.3
 	github.com/corazawaf/coraza-coreruleset/v4 v4.7.0
 	github.com/elastic/cloud-on-k8s/v2 v2.0.0-20250129010100-648f902d9807
-	github.com/envoyproxy/gateway v1.8.4
+	github.com/envoyproxy/gateway v1.9.1
 	github.com/go-ldap/ldap v3.0.3+incompatible
 	github.com/go-logr/logr v1.4.4
 	github.com/google/go-cmp v0.7.0
@@ -43,7 +43,7 @@ require (
 	k8s.io/kube-aggregator v0.33.13
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
 	sigs.k8s.io/controller-runtime v0.24.1
-	sigs.k8s.io/gateway-api v1.5.1
+	sigs.k8s.io/gateway-api v1.6.1
 	sigs.k8s.io/kind v0.29.0 // Do not remove, not used by code but used by build
 	sigs.k8s.io/secrets-store-csi-driver v1.4.8
 	sigs.k8s.io/yaml v1.6.0

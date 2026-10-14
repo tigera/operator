@@ -355,6 +355,7 @@ var _ = Describe("Status reporting tests", func() {
 						ObservedGeneration: gen,
 						Replicas:           replicas,
 						ReadyReplicas:      replicas,
+						AvailableReplicas:  replicas,
 						CurrentReplicas:    replicas,
 						UpdatedReplicas:    replicas,
 					},
@@ -387,6 +388,97 @@ var _ = Describe("Status reporting tests", func() {
 				})).NotTo(HaveOccurred())
 				sm.updateStatus()
 				Expect(sm.IsDegraded()).To(BeTrue())
+			})
+		})
+
+		Context("when a statefulset is rolling out", func() {
+			replicas := int32(1)
+
+			createStatefulSet := func(gen int64, status appsv1.StatefulSetStatus) {
+				sm.ReadyToMonitor()
+				sm.AddStatefulSets([]types.NamespacedName{{Namespace: "NS1", Name: "SS1"}})
+				Expect(client.Create(ctx, &appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "NS1", Name: "SS1", Generation: gen},
+					Spec: appsv1.StatefulSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"ss1Key": "ss1Value"}},
+						Replicas: &replicas,
+					},
+					Status: status,
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+			}
+
+			It("should not be available while its pod is created but not ready", func() {
+				createStatefulSet(1, appsv1.StatefulSetStatus{
+					ObservedGeneration: 1,
+					Replicas:           replicas,
+					CurrentReplicas:    replicas,
+					UpdatedReplicas:    replicas,
+				})
+				Expect(sm.IsAvailable()).To(BeFalse())
+				Expect(sm.IsProgressing()).To(BeTrue())
+				Expect(sm.progressing).To(ConsistOf(`Statefulset "NS1/SS1" is not available (awaiting 1 replicas)`))
+			})
+
+			It("should not be available while the pod is replaced by an update", func() {
+				createStatefulSet(2, appsv1.StatefulSetStatus{
+					ObservedGeneration: 2,
+					Replicas:           replicas,
+					UpdatedReplicas:    replicas,
+				})
+				Expect(sm.IsAvailable()).To(BeFalse())
+				Expect(sm.progressing).To(ConsistOf(`Statefulset "NS1/SS1" is not available (awaiting 1 replicas)`))
+			})
+
+			It("should not be available while old pods are still being updated", func() {
+				createStatefulSet(2, appsv1.StatefulSetStatus{
+					ObservedGeneration: 2,
+					Replicas:           replicas,
+					ReadyReplicas:      replicas,
+					AvailableReplicas:  replicas,
+					CurrentReplicas:    replicas,
+				})
+				Expect(sm.IsAvailable()).To(BeFalse())
+				Expect(sm.progressing).To(ConsistOf(`Statefulset "NS1/SS1" update is rolling out (0 of 1 replicas updated)`))
+			})
+
+			It("should not be available until the controller observes the new generation", func() {
+				createStatefulSet(3, appsv1.StatefulSetStatus{
+					ObservedGeneration: 2,
+					Replicas:           replicas,
+					ReadyReplicas:      replicas,
+					AvailableReplicas:  replicas,
+					CurrentReplicas:    replicas,
+					UpdatedReplicas:    replicas,
+				})
+				Expect(sm.IsAvailable()).To(BeFalse())
+				Expect(sm.progressing).To(ConsistOf(`Statefulset "NS1/SS1" update is being processed (generation 3, observed generation 2)`))
+			})
+
+			It("should not be available while extra pods are still running after a scale down", func() {
+				createStatefulSet(2, appsv1.StatefulSetStatus{
+					ObservedGeneration: 2,
+					Replicas:           3,
+					ReadyReplicas:      3,
+					AvailableReplicas:  3,
+					CurrentReplicas:    3,
+					UpdatedReplicas:    3,
+				})
+				Expect(sm.IsAvailable()).To(BeFalse())
+				Expect(sm.progressing).To(ConsistOf(`Statefulset "NS1/SS1" is scaling down (3 replicas, want 1)`))
+			})
+
+			It("should be available once every replica is updated and available", func() {
+				createStatefulSet(2, appsv1.StatefulSetStatus{
+					ObservedGeneration: 2,
+					Replicas:           replicas,
+					ReadyReplicas:      replicas,
+					AvailableReplicas:  replicas,
+					CurrentReplicas:    replicas,
+					UpdatedReplicas:    replicas,
+				})
+				Expect(sm.IsAvailable()).To(BeTrue())
+				Expect(sm.progressing).To(BeEmpty())
 			})
 		})
 
@@ -534,6 +626,29 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				})).NotTo(HaveOccurred())
 				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring("running but not ready")))
+			})
+
+			It("should degrade when a statefulset pod never becomes ready", func() {
+				sm.AddStatefulSets([]types.NamespacedName{{Namespace: "NS1", Name: "SS1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "NS1", Name: "SS1", Generation: gen},
+					Spec: appsv1.StatefulSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"dp1Key": "dp1Value"}},
+						Replicas: &replicas,
+					},
+					Status: appsv1.StatefulSetStatus{
+						ObservedGeneration: gen,
+						Replicas:           replicas,
+						CurrentReplicas:    replicas,
+						UpdatedReplicas:    replicas,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsAvailable()).To(BeFalse())
 				Expect(sm.IsDegraded()).To(BeTrue())
 				Expect(sm.failing).To(ContainElement(ContainSubstring("running but not ready")))
 			})

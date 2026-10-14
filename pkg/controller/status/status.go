@@ -575,22 +575,25 @@ func (m *statusManager) syncState() {
 			log.WithValues("reason", err).Info("Failed to query statefulset")
 			continue
 		}
-		if *ss.Spec.Replicas != ss.Status.CurrentReplicas {
-			progressing = append(progressing, fmt.Sprintf("Statefulset %q is not available (awaiting %d replicas)", depnn.String(), ss.Status.CurrentReplicas-*ss.Spec.Replicas))
-		} else if ss.Status.ObservedGeneration < ss.Generation {
-			progressing = append(progressing, fmt.Sprintf("Statefulset %q update is being processed (generation %d, observed generation %d)", ss.String(), ss.Generation, ss.Status.ObservedGeneration))
-		}
-
 		replicas := int32(1)
 		if ss.Spec.Replicas != nil {
 			replicas = *ss.Spec.Replicas
+		}
+		if ss.Status.ObservedGeneration < ss.Generation {
+			progressing = append(progressing, fmt.Sprintf("Statefulset %q update is being processed (generation %d, observed generation %d)", depnn.String(), ss.Generation, ss.Status.ObservedGeneration))
+		} else if ss.Status.AvailableReplicas < replicas {
+			progressing = append(progressing, fmt.Sprintf("Statefulset %q is not available (awaiting %d replicas)", depnn.String(), replicas-ss.Status.AvailableReplicas))
+		} else if ss.Status.UpdatedReplicas < replicas {
+			progressing = append(progressing, fmt.Sprintf("Statefulset %q update is rolling out (%d of %d replicas updated)", depnn.String(), ss.Status.UpdatedReplicas, replicas))
+		} else if ss.Status.Replicas > replicas {
+			progressing = append(progressing, fmt.Sprintf("Statefulset %q is scaling down (%d replicas, want %d)", depnn.String(), ss.Status.Replicas, replicas))
 		}
 		// There could be old pods in the Errored, Terminated, or Completed state
 		// but if the following are true then we don't need to worry about those
 		// failed pods so continue.
 		if ss.Status.ObservedGeneration == ss.Generation &&
 			replicas == ss.Status.CurrentReplicas &&
-			replicas == ss.Status.ReadyReplicas &&
+			replicas == ss.Status.AvailableReplicas &&
 			replicas == ss.Status.UpdatedReplicas {
 			continue
 		}

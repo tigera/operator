@@ -911,10 +911,27 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		utils.SetInstallationFinalizer(instance, render.OperatorCompleteFinalizer)
 	}
 
+	// Query 'overlay' up front: the CRD update below must use the overlay-merged variant.
+	overlay := operatorv1.Installation{}
+	overlayFound := true
+	if err := r.client.Get(ctx, utils.OverlayInstanceKey, &overlay); err != nil {
+		if !apierrors.IsNotFound(err) {
+			reqLogger.Error(err, "An error occurred when querying the 'overlay' Installation resource")
+			return reconcile.Result{}, err
+		}
+		overlayFound = false
+	}
+
 	// Update CRDs before persisting defaults. Defaulting can set a value only this operator version's
 	// CRD accepts (e.g. an autodetected kubernetesProvider=Kind); on upgrade the old served CRD would
 	// otherwise reject the write and the reconcile would loop before ever reaching the CRD update.
-	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
+	// The variant may be set only in 'overlay' (e.g. AKS upgrades from Calico), so merge it first;
+	// otherwise the Calico CRDs replace the Enterprise ones and their Enterprise fields are pruned.
+	crdVariant := instance.Spec.Variant
+	if overlayFound {
+		crdVariant = utils.OverrideInstallationSpec(instance.Spec, overlay.Spec).Variant
+	}
+	if err = r.updateCRDs(ctx, crdVariant, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -928,12 +945,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Update Installation with 'overlay'
-	overlay := operatorv1.Installation{}
-	if err := r.client.Get(ctx, utils.OverlayInstanceKey, &overlay); err != nil {
-		if !apierrors.IsNotFound(err) {
-			reqLogger.Error(err, "An error occurred when querying the 'overlay' Installation resource")
-			return reconcile.Result{}, err
-		}
+	if !overlayFound {
 		reqLogger.V(5).Info("no 'overlay' installation found")
 	} else {
 		instance.Spec = utils.OverrideInstallationSpec(instance.Spec, overlay.Spec)

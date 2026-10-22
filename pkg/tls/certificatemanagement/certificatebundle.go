@@ -16,6 +16,9 @@ package certificatemanagement
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"path"
@@ -263,13 +266,45 @@ func getSystemCertificates() ([]byte, error) {
 		data, err := os.ReadFile(filename)
 		if err != nil {
 			if !os.IsNotExist(err) {
-				return nil, fmt.Errorf(fmt.Sprintf("error occurred when loading system root certificate with name %s", filename), err)
+				return nil, fmt.Errorf("error occurred when loading system root certificate with name %s: %w", filename, err)
 			}
 		} else {
-			return data, nil
+			return filterDistrustedCertificates(data), nil
 		}
 	}
 	return nil, nil
+}
+
+// distrustedRootFingerprints holds the SHA-256 fingerprints of roots that are dropped from the system bundle, even
+// while the operator's base image still ships them. emSign ECC Root CA - G3 anchors the eMudhra intermediates whose
+// private keys were recovered (RHSB-2026-012, https://bugzilla.mozilla.org/show_bug.cgi?id=2084101). All four emSign
+// roots are dropped so that no eMudhra-issued chain validates against this bundle.
+var distrustedRootFingerprints = map[string]bool{
+	"40f6af0346a99aa1cd1d555a4e9cce62c7f9634603ee406615833dc8c8d00367": true, // emSign Root CA - G1
+	"125609aa301da0a249b97a8239cb6a34216f44dcac9f3954b14292f2e8c8608f": true, // emSign Root CA - C1
+	"86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b": true, // emSign ECC Root CA - G3
+	"bc4d809b15189d78db3e1d8cf4f9726a795da1643ca5f1358e1ddb0edc0d7eb3": true, // emSign ECC Root CA - C3
+}
+
+// filterDistrustedCertificates removes distrusted roots from a PEM bundle and keeps every other byte as is.
+func filterDistrustedCertificates(data []byte) []byte {
+	var out []byte
+	rest := data
+	for {
+		block, next := pem.Decode(rest)
+		if block == nil {
+			return append(out, rest...)
+		}
+		segment := rest[:len(rest)-len(next)]
+		rest = next
+		if block.Type == "CERTIFICATE" {
+			sum := sha256.Sum256(block.Bytes)
+			if distrustedRootFingerprints[hex.EncodeToString(sum[:])] {
+				continue
+			}
+		}
+		out = append(out, segment...)
+	}
 }
 
 func TrustedBundleName(prefix string, includeSystem bool) string {

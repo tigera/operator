@@ -51,6 +51,9 @@ import (
 
 const (
 	reconcileErr = "Error_reconciling_Egress_Gateway"
+
+	// fieldOwner names this controller's FelixConfiguration writes in managed fields.
+	fieldOwner = "operator.tigera.io/egressgateway"
 )
 
 var log = logf.Log.WithName("controller_egressgateway")
@@ -288,7 +291,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// patch and get the felix configuration
-	fc, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
+	fc, err := utils.PatchFelixConfiguration(ctx, r.client, fieldOwner, func(fc *v3.FelixConfiguration) (bool, error) {
 		if fc.Spec.PolicySyncPathPrefix != "" {
 			return false, nil // don't proceed with the patch
 		}

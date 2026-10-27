@@ -50,6 +50,9 @@ import (
 
 const ResourceName = "applicationlayer"
 
+// fieldOwner names this controller's FelixConfiguration writes in managed fields.
+const fieldOwner = "operator.tigera.io/applicationlayer"
+
 var log = logf.Log.WithName("controller_applicationlayer")
 
 // Add creates a new ApplicationLayer Controller and adds it to the Manager.
@@ -522,7 +525,7 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 	}
 	istioNeeds := utils.IstioRequiresPolicySync(istioCR, r.variant)
 
-	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
+	_, err = utils.PatchFelixConfiguration(ctx, r.client, fieldOwner, func(fc *v3.FelixConfiguration) (bool, error) {
 		wafEventLogsFileEnabled := wafEventLogsFileRequired(al, gatewayWAFEnabled)
 
 		var tproxyMode string

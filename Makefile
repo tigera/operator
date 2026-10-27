@@ -164,7 +164,7 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
 		-e ACK_GINKGO_RC=true \
 		-e ACK_GINKGO_DEPRECATIONS=1.16.5 \
-		-e GOTOOLCHAIN=go1.26.6+auto \
+		-e GOTOOLCHAIN=go1.26.10+auto \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
 		$(EXTRA_DOCKER_ARGS)
@@ -523,7 +523,7 @@ cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
 # compiles it comes from GOTOOLCHAIN above plus the go.mod directive - not from
 # GO_VERSION. Keep this image's Go version in step with that floor so lint and
 # the binary are checked by the same compiler.
-CALICO_BUILD_LINT ?= calico/go-build:1.26.7-llvm21.1.8-k8s1.36.4-$(BUILDARCH)
+CALICO_BUILD_LINT ?= calico/go-build:1.26.10-llvm21.1.8-k8s1.36.5-$(BUILDARCH)
 static-checks:
 	$(CONTAINERIZED) $(CALICO_BUILD_LINT) golangci-lint run --timeout 5m
 

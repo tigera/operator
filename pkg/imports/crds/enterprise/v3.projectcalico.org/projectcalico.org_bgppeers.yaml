@@ -58,9 +58,23 @@ spec:
             spec:
               properties:
                 asNumber:
-                  format: int32
+                  format: int64
+                  maximum: 4294967295
+                  minimum: 0
                   type: integer
                 birdGatewayMode:
+                  type: string
+                connectionMode:
+                  allOf:
+                    - enum:
+                        - Auto
+                        - Active
+                        - Passive
+                    - enum:
+                        - Auto
+                        - Active
+                        - Passive
+                  default: Auto
                   type: string
                 extensions:
                   additionalProperties:
@@ -79,7 +93,9 @@ spec:
                 keepaliveTime:
                   type: string
                 localASNumber:
-                  format: int32
+                  format: int64
+                  maximum: 4294967295
+                  minimum: 0
                   type: integer
                 localWorkloadSelector:
                   maxLength: 4096

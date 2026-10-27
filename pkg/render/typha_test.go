@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -516,6 +517,54 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName)))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
+	})
+
+	It("should give the non-cluster-host Typha its own key-cert-provisioner when certificate management is enabled", func() {
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLS.TyphaSecret.GetCertificatePEM()}
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		cfg.TLS = getTyphaNodeTLS(cli, certificateManager)
+		initResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("64Mi")},
+		}
+		installation.TyphaDeployment = &operatorv1.TyphaDeployment{
+			Spec: &operatorv1.TyphaDeploymentSpec{
+				Template: &operatorv1.TyphaDeploymentPodTemplateSpec{
+					Spec: &operatorv1.TyphaDeploymentPodSpec{
+						InitContainers: []operatorv1.TyphaDeploymentInitContainer{
+							{Name: "typha-certs-key-cert-provisioner", Resources: &initResources},
+						},
+					},
+				},
+			},
+		}
+
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		for _, name := range []string{common.TyphaDeploymentName, common.TyphaDeploymentName + render.TyphaNonClusterHostSuffix} {
+			d, ok := rtest.GetResource(resources, name, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue(), name)
+			spec := d.Spec.Template.Spec
+
+			volumes := map[string]bool{}
+			for _, v := range spec.Volumes {
+				volumes[v.Name] = true
+			}
+			for _, c := range slices.Concat(spec.InitContainers, spec.Containers) {
+				for _, m := range c.VolumeMounts {
+					Expect(volumes).To(HaveKey(m.Name), "%s container %s mounts a volume the pod does not define", name, c.Name)
+				}
+			}
+		}
+
+		d, ok := rtest.GetResource(resources, common.TyphaDeploymentName+render.TyphaNonClusterHostSuffix, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		ic := d.Spec.Template.Spec.InitContainers[0]
+		Expect(ic.Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretNameNonClusterHost)))
+		rtest.ExpectEnv(ic.Env, "SECRET_NAME", render.TyphaTLSSecretNameNonClusterHost)
+		Expect(ic.Resources).To(Equal(initResources))
 	})
 
 	It("should not enable prometheus metrics if TyphaMetricsPort is nil", func() {

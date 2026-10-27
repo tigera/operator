@@ -501,6 +501,14 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 			}
 		}
 		spec.Volumes = c.volumeNonClusterHost()
+		if c.cfg.TLS.TyphaSecretNonClusterHost.UseCertificateManagement() {
+			clusterInit := c.cfg.TLS.TyphaSecret.InitContainer(common.CalicoNamespace, typhaContainer.SecurityContext)
+			for i := range spec.InitContainers {
+				if spec.InitContainers[i].Name == clusterInit.Name {
+					spec.InitContainers[i] = c.initContainerNonClusterHost(spec.InitContainers[i])
+				}
+			}
+		}
 
 		// The env vars were rebuilt, so carry the overridden grace period over again.
 		c.applyPostOverrideFixUps(deployNonClusterHost)
@@ -606,6 +614,15 @@ func (c *typhaComponent) typhaContainerNonClusterHost(container corev1.Container
 	container.VolumeMounts = c.typhaVolumeMountsNonClusterHost()
 	container.LivenessProbe, container.ReadinessProbe = c.livenessReadinessProbes("")
 	return container
+}
+
+// initContainerNonClusterHost replaces the cluster Typha's key-cert-provisioner with one
+// that requests the non-cluster-host certificate into that keypair's volume. It keeps the
+// security context and any resource overrides the cluster init container carried.
+func (c *typhaComponent) initContainerNonClusterHost(clusterInit corev1.Container) corev1.Container {
+	init := c.cfg.TLS.TyphaSecretNonClusterHost.InitContainer(common.CalicoNamespace, clusterInit.SecurityContext)
+	init.Resources = clusterInit.Resources
+	return init
 }
 
 // typhaResources creates the typha's resource requirements.

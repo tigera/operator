@@ -770,6 +770,61 @@ var _ = Describe("Typha rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr2))
 		})
 
+		It("should carry typhaDeployment overrides onto the non-cluster-host Typha deployment", func() {
+			termGracePeriod := int64(700)
+			affinity := &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{{
+								Key:      "custom-affinity-key",
+								Operator: corev1.NodeSelectorOpExists,
+							}},
+						}},
+					},
+				},
+			}
+			installation.TyphaDeployment = &operatorv1.TyphaDeployment{
+				Spec: &operatorv1.TyphaDeploymentSpec{
+					Template: &operatorv1.TyphaDeploymentPodTemplateSpec{
+						Spec: &operatorv1.TyphaDeploymentPodSpec{
+							TerminationGracePeriodSeconds: &termGracePeriod,
+							Affinity:                      affinity,
+							Containers: []operatorv1.TyphaDeploymentContainer{
+								{
+									Name:      "calico-typha",
+									Resources: &rr2,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			component := render.Typha(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			d, ok := rtest.GetResource(resources, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			c := d.Spec.Template.Spec.Containers[0]
+			Expect(c.Name).To(Equal("calico-typha"))
+			Expect(c.Resources).To(Equal(rr2))
+			Expect(*d.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(termGracePeriod))
+			Expect(c.Env).To(ContainElement(corev1.EnvVar{Name: "TYPHA_SHUTDOWNTIMEOUTSECS", Value: "700"}))
+
+			// The pod-networked copy still differs from the cluster Typha where it must.
+			Expect(d.Spec.Template.Spec.Affinity).To(BeNil())
+			Expect(d.Spec.Template.Spec.HostNetwork).To(BeFalse())
+			Expect(c.Env).To(ContainElements(
+				corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"},
+				corev1.EnvVar{Name: "TYPHA_SERVERCERTFILE", Value: "/typha-certs-noncluster-host/tls.crt"},
+			))
+			Expect(c.VolumeMounts).To(ContainElement(HaveField("Name", "typha-certs-noncluster-host")))
+			Expect(c.LivenessProbe.HTTPGet.Host).To(BeEmpty())
+		})
+
 		It("should override ControlPlaneNodeSelector when specified", func() {
 			cfg.Installation.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 

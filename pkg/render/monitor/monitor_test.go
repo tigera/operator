@@ -175,7 +175,7 @@ var _ = Describe("monitor rendering tests", func() {
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
 		Expect(ok).To(BeTrue())
 
-		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers).To(HaveLen(1))
+		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers).To(HaveLen(2))
 		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers[0].Name).To(Equal("authn-proxy"))
 		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers[0].Resources).To(Equal(prometheusResources))
 
@@ -368,7 +368,7 @@ var _ = Describe("monitor rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
-		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers).To(HaveLen(1))
+		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers).To(HaveLen(2))
 		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers[0].Name).To(Equal("authn-proxy"))
 		Expect(*prometheusObj.Spec.CommonPrometheusFields.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*prometheusObj.Spec.CommonPrometheusFields.Containers[0].SecurityContext.Privileged).To(BeFalse())
@@ -384,6 +384,11 @@ var _ = Describe("monitor rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
+		promContainer := prometheusObj.Spec.Containers[1]
+		Expect(promContainer.Name).To(Equal("prometheus"))
+		Expect(promContainer.StartupProbe.Exec.Command).To(Equal([]string{"/bin/promtool", "check", "ready"}))
+		Expect(promContainer.ReadinessProbe.Exec.Command).To(Equal([]string{"/bin/promtool", "check", "ready"}))
+		Expect(promContainer.LivenessProbe.Exec.Command).To(Equal([]string{"/bin/promtool", "check", "healthy"}))
 
 		// Prometheus ServiceAccount
 		_, ok = rtest.GetResource(toCreate, "prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount").(*corev1.ServiceAccount)
@@ -682,7 +687,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(ok).To(BeTrue())
 		prometheusCom := components.ComponentPrometheus
 		Expect(*prometheusObj.Spec.Image).To(Equal(fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, prometheusCom.Image, prometheusCom.Version)))
-		Expect(prometheusObj.Spec.Containers).To(HaveLen(1))
+		Expect(prometheusObj.Spec.Containers).To(HaveLen(2))
 		proxy := prometheusObj.Spec.Containers[0]
 		Expect(proxy.Env).To(ConsistOf([]corev1.EnvVar{
 			{

@@ -606,6 +606,15 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 						},
 						SecurityContext: sc,
 					},
+					{
+						// With ListenLocal, prometheus-operator generates probes that run
+						// sh and curl, which the Prometheus image does not ship. The
+						// strategic merge keeps the operator's probe timings.
+						Name:           "prometheus",
+						StartupProbe:   promtoolProbe("ready"),
+						ReadinessProbe: promtoolProbe("ready"),
+						LivenessProbe:  promtoolProbe("healthy"),
+					},
 				},
 				Image:            &mc.prometheusImage,
 				ImagePullPolicy:  render.ImagePullPolicy(),
@@ -653,6 +662,14 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 	}
 
 	return prometheus
+}
+
+func promtoolProbe(check string) *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{Command: []string{"/bin/promtool", "check", check}},
+		},
+	}
 }
 
 func (mc *monitorComponent) prometheusServiceAccount() *corev1.ServiceAccount {

@@ -191,6 +191,15 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				},
 			},
 		))
+		// The rendered listeners bind ${POD_IP} so IPv6-only pods are reachable.
+		Expect(envs).Should(ContainElement(
+			corev1.EnvVar{
+				Name: "POD_IP",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"},
+				},
+			},
+		))
 
 		// Linseed/TLS config is now in the ConfigMap, not env vars.
 		Expect(envs).ShouldNot(ContainElements(
@@ -1100,6 +1109,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 		expectedEnvVars := []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "info", ValueFrom: nil},
+			{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}},
 			{Name: "EKS_CLOUDWATCH_LOG_GROUP", Value: "dummy-eks-cluster-cloudwatch-log-group"},
 			{Name: "AWS_REGION", Value: "us-west-1", ValueFrom: nil},
 			{

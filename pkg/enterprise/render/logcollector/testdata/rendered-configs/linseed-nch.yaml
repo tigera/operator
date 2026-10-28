@@ -2,6 +2,7 @@
   "service": {
     "flush": 5,
     "health_check": true,
+    "http_listen": "${POD_IP}",
     "http_port": 2020,
     "http_server": true,
     "log_level": "info",
@@ -180,7 +181,7 @@
       {
         "buffer_chunk_size": "5M",
         "buffer_max_size": "100M",
-        "listen": "0.0.0.0",
+        "listen": "${POD_IP}",
         "name": "http",
         "port": 9880,
         "storage.type": "filesystem",

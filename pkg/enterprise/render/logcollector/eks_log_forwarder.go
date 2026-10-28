@@ -63,6 +63,7 @@ func (c *fluentBitComponent) renderEKSFluentBitConf() string {
 			"flush":        5,
 			"log_level":    "info",
 			"http_server":  true,
+			"http_listen":  fluentBitListenAddress,
 			"http_port":    FluentBitMetricsPort,
 			"health_check": true,
 			// Load the custom in_eks Go plugin shipped in the image. Without
@@ -104,6 +105,7 @@ func (c *fluentBitComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
+		podIPEnvVar,
 		// CloudWatch config, credentials — consumed by the in_eks input plugin
 		// (fluent-bit/plugins/in_eks/pkg/config) and the AWS SDK credential chain.
 		{Name: "EKS_CLOUDWATCH_LOG_GROUP", Value: c.cfg.EKSConfig.GroupName},

@@ -39,6 +39,7 @@ func (c *fluentBitComponent) renderFluentBitConf() string {
 			"flush":       5,
 			"log_level":   "info",
 			"http_server": true,
+			"http_listen": fluentBitListenAddress,
 			"http_port":   FluentBitMetricsPort,
 			// Enable the /api/v1/health endpoint the readiness probe hits
 			// (without this it returns 404 and pods never become Ready).
@@ -116,7 +117,7 @@ func (c *fluentBitComponent) addInputs(cfg *fluentBitConfig) {
 	if c.cfg.NonClusterHost != nil && c.osType == rmeta.OSTypeLinux {
 		cfg.Pipeline.Inputs = append(cfg.Pipeline.Inputs, map[string]interface{}{
 			"name":   "http",
-			"listen": "0.0.0.0",
+			"listen": fluentBitListenAddress,
 			"port":   FluentBitInputPort,
 			// fluentd's http source accepted bodies up to `body_size_limit
 			// 100m`; in_http instead rejects anything over buffer_max_size

@@ -254,9 +254,19 @@ func (c *fluentBitComponent) metricsService() *corev1.Service {
 	}
 }
 
+// fluent-bit's listeners default to 0.0.0.0, which an IPv6-only pod can't be
+// reached on. Binding the pod IP covers either family without guessing it from
+// the IP pools (empty under non-Calico CNIs), and avoids "::", which fails
+// where IPv6 is disabled and is v6-only on Windows.
+const fluentBitListenAddress = "${POD_IP}"
+
+// podIPEnvVar feeds fluentBitListenAddress.
+var podIPEnvVar = corev1.EnvVar{Name: "POD_IP", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}}
+
 func (c *fluentBitComponent) envvars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
+		podIPEnvVar,
 	}
 	// Additional stores are Linux-only (the Windows pipeline ships to Linseed
 	// only, matching the fluentd Windows variant), so their credentials are too.

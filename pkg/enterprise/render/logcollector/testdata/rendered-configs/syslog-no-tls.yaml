@@ -2,6 +2,7 @@
   "service": {
     "flush": 5,
     "health_check": true,
+    "http_listen": "${POD_IP}",
     "http_port": 2020,
     "http_server": true,
     "log_level": "info",

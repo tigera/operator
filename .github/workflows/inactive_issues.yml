@@ -11,7 +11,7 @@ jobs:
       pull-requests: write
     steps:
       # This step marks support issues and PRs as stale.
-      - uses: actions/stale@v9
+      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9.1.0
         with:
           # Issues configuration. We mark issues as stale after 30 days, and close them another two weeks after that if there
           # is no further activity.
@@ -36,7 +36,7 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       # This step marks kind/enhancement and kind/bug as stale, after a longer period of time.
-      - uses: actions/stale@v9
+      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9.1.0
         with:
           # Mark enhancement and bug issues stale after 6 months, then close them after another month of inactivity.
           days-before-issue-stale: 180

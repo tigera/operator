@@ -646,7 +646,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]any {
 
 	ipam := c.getCalicoIPAM()
 	if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
-		ipam = buildHostLocalIPAM(c.cfg.IPPools)
+		ipam = buildHostLocalIPAM(WorkloadIPPools(c.cfg.IPPools))
 	}
 
 	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
@@ -805,14 +805,15 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 
 func (c *nodeComponent) getCalicoIPAM() map[string]any {
 	// Determine what address families to enable.
+	pools := WorkloadIPPools(c.cfg.IPPools)
 	var assign_ipv4 string
 	var assign_ipv6 string
-	if v4pool := GetIPv4Pool(c.cfg.IPPools); v4pool != nil {
+	if v4pool := GetIPv4Pool(pools); v4pool != nil {
 		assign_ipv4 = "true"
 	} else {
 		assign_ipv4 = "false"
 	}
-	if v6pool := GetIPv6Pool(c.cfg.IPPools); v6pool != nil {
+	if v6pool := GetIPv6Pool(pools); v6pool != nil {
 		assign_ipv6 = "true"
 	} else {
 		assign_ipv6 = "false"
@@ -1792,6 +1793,31 @@ func GetIPv6Pool(pools []operatorv1.IPPool) *operatorv1.IPPool {
 	}
 
 	return nil
+}
+
+// WorkloadIPPools returns the pools that can hand out addresses to ordinary workloads.
+func WorkloadIPPools(pools []operatorv1.IPPool) []operatorv1.IPPool {
+	filtered := []operatorv1.IPPool{}
+	for _, pool := range pools {
+		if allowsWorkloads(pool) {
+			filtered = append(filtered, pool)
+		}
+	}
+	return filtered
+}
+
+func allowsWorkloads(pool operatorv1.IPPool) bool {
+	if len(pool.AllowedUses) == 0 {
+		// An unset allowedUses means Workload and Tunnel, for back-compatibility.
+		return true
+	}
+
+	for _, use := range pool.AllowedUses {
+		if use == operatorv1.IPPoolAllowedUseWorkload {
+			return true
+		}
+	}
+	return false
 }
 
 // bgpEnabled returns true if the given Installation enables BGP, false otherwise.

@@ -36,9 +36,7 @@ spec:
                         type: string
                       asPathPrefix:
                         items:
-                          format: int64
-                          maximum: 4294967295
-                          minimum: 0
+                          format: int32
                           type: integer
                         type: array
                       cidr:
@@ -87,9 +85,7 @@ spec:
                               properties:
                                 prefix:
                                   items:
-                                    format: int64
-                                    maximum: 4294967295
-                                    minimum: 0
+                                    format: int32
                                     type: integer
                                   maxItems: 10
                                   minItems: 1
@@ -170,9 +166,7 @@ spec:
                         type: string
                       asPathPrefix:
                         items:
-                          format: int64
-                          maximum: 4294967295
-                          minimum: 0
+                          format: int32
                           type: integer
                         type: array
                       cidr:
@@ -221,9 +215,7 @@ spec:
                               properties:
                                 prefix:
                                   items:
-                                    format: int64
-                                    maximum: 4294967295
-                                    minimum: 0
+                                    format: int32
                                     type: integer
                                   maxItems: 10
                                   minItems: 1
@@ -304,9 +296,7 @@ spec:
                         type: string
                       asPathPrefix:
                         items:
-                          format: int64
-                          maximum: 4294967295
-                          minimum: 0
+                          format: int32
                           type: integer
                         type: array
                       cidr:
@@ -355,9 +345,7 @@ spec:
                               properties:
                                 prefix:
                                   items:
-                                    format: int64
-                                    maximum: 4294967295
-                                    minimum: 0
+                                    format: int32
                                     type: integer
                                   maxItems: 10
                                   minItems: 1
@@ -438,9 +426,7 @@ spec:
                         type: string
                       asPathPrefix:
                         items:
-                          format: int64
-                          maximum: 4294967295
-                          minimum: 0
+                          format: int32
                           type: integer
                         type: array
                       cidr:
@@ -489,9 +475,7 @@ spec:
                               properties:
                                 prefix:
                                   items:
-                                    format: int64
-                                    maximum: 4294967295
-                                    minimum: 0
+                                    format: int32
                                     type: integer
                                   maxItems: 10
                                   minItems: 1

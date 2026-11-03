@@ -30,9 +30,7 @@ spec:
             spec:
               properties:
                 asNumber:
-                  format: int64
-                  maximum: 4294967295
-                  minimum: 0
+                  format: int32
                   type: integer
                 bindMode:
                   enum:

@@ -2135,19 +2135,47 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Annotations["prometheus.io/port"]).To(Equal("1234"))
 			})
 
-			It("should not render a FlexVolume container if FlexVolumePath is set to None", func() {
-				defaultInstance.FlexVolumePath = "None"
-				component := render.Node(&cfg)
-				Expect(component.ResolveImages(nil)).To(BeNil())
-				resources, _ := component.Objects()
-				Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+			DescribeTable("should replace an installed FlexVolume driver in the provider's plugin dir if FlexVolumePath is None",
+				func(variant operatorv1.ProductVariant, provider operatorv1.Provider, root, dir string) {
+					defaultInstance.Variant = variant
+					defaultInstance.FlexVolumePath = "None"
+					defaultInstance.KubernetesProvider = provider
+					component := render.Node(&cfg)
+					Expect(component.ResolveImages(nil)).To(BeNil())
+					resources, _ := component.Objects()
 
-				dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
-				Expect(dsResource).ToNot(BeNil())
-				ds := dsResource.(*appsv1.DaemonSet)
-				Expect(ds).ToNot(BeNil())
-				verifyInitContainers(ds, defaultInstance)
-			})
+					dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+					Expect(dsResource).ToNot(BeNil())
+					ds := dsResource.(*appsv1.DaemonSet)
+
+					fv := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
+					Expect(fv).NotTo(BeNil())
+					if variant.IsEnterprise() {
+						Expect(fv.Command).To(Equal([]string{components.CalicoBinaryPath, "component", "flexvol", "install", "--if-present", "--target", dir + "/uds"}))
+						Expect(fv.Args).To(BeEmpty())
+					} else {
+						Expect(fv.Command).To(BeEmpty())
+						Expect(fv.Args).To(Equal([]string{"-p", "-t", dir}))
+					}
+					Expect(fv.VolumeMounts).To(Equal([]corev1.VolumeMount{{MountPath: "/host/driver", Name: "flexvol-driver-host"}}))
+
+					dirMustExist := corev1.HostPathDirectory
+					Expect(ds.Spec.Template.Spec.Volumes).To(ContainElement(corev1.Volume{
+						Name:         "flexvol-driver-host",
+						VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: root, Type: &dirMustExist}},
+					}))
+				},
+				Entry("Calico default", operatorv1.Calico, operatorv1.ProviderNone, "/usr", "/host/driver/libexec/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds"),
+				Entry("Calico OpenShift", operatorv1.Calico, operatorv1.ProviderOpenShift, "/etc/kubernetes", "/host/driver/kubelet-plugins/volume/exec/nodeagent~uds"),
+				Entry("Calico GKE", operatorv1.Calico, operatorv1.ProviderGKE, "/home/kubernetes", "/host/driver/flexvolume/nodeagent~uds"),
+				Entry("Calico AKS", operatorv1.Calico, operatorv1.ProviderAKS, "/etc/kubernetes", "/host/driver/volumeplugins/nodeagent~uds"),
+				Entry("Calico RKE2", operatorv1.Calico, operatorv1.ProviderRKE2, "/var/lib/kubelet", "/host/driver/volumeplugins/nodeagent~uds"),
+				Entry("Enterprise default", operatorv1.TigeraSecureEnterprise, operatorv1.ProviderNone, "/usr", "/host/driver/libexec/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds"),
+				Entry("Enterprise OpenShift", operatorv1.TigeraSecureEnterprise, operatorv1.ProviderOpenShift, "/etc/kubernetes", "/host/driver/kubelet-plugins/volume/exec/nodeagent~uds"),
+				Entry("Enterprise GKE", operatorv1.TigeraSecureEnterprise, operatorv1.ProviderGKE, "/home/kubernetes", "/host/driver/flexvolume/nodeagent~uds"),
+				Entry("Enterprise AKS", operatorv1.TigeraSecureEnterprise, operatorv1.ProviderAKS, "/etc/kubernetes", "/host/driver/volumeplugins/nodeagent~uds"),
+				Entry("Enterprise RKE2", operatorv1.TigeraSecureEnterprise, operatorv1.ProviderRKE2, "/var/lib/kubelet", "/host/driver/volumeplugins/nodeagent~uds"),
+			)
 
 			It("should omit the cni-plugins init container when CNI.InstallMode is CalicoOnly", func() {
 				// OSS never stages the upstream plugins, so set Enterprise to exercise the
@@ -3415,9 +3443,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 		numInitContainers++
 	}
 	// FlexVolume adds an additional FlexVolume init container.
-	if instance.FlexVolumePath != "None" {
-		numInitContainers++
-	}
+	numInitContainers++
 	Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(numInitContainers))
 
 	// Verify the key/cert init container is correct when certificate management is enabled.
@@ -3558,31 +3584,29 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 
 	// Verify the Flex volume container image.
 	flexvolContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
-	if instance.FlexVolumePath != "None" {
-		Expect(flexvolContainer).NotTo(BeNil())
-		if instance.Variant.IsEnterprise() {
-			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version)))
+	Expect(flexvolContainer).NotTo(BeNil())
+	if instance.Variant.IsEnterprise() {
+		Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version)))
+		if instance.FlexVolumePath != "None" {
 			Expect(flexvolContainer.Command).To(Equal([]string{"/usr/bin/calico", "component", "flexvol", "install", "--target", "/host/driver/uds"}))
-		} else {
-			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
-			Expect(flexvolContainer.Command).To(BeEmpty())
 		}
-
-		Expect(*flexvolContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
-		Expect(*flexvolContainer.SecurityContext.Privileged).To(BeTrue())
-		Expect(*flexvolContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
-		Expect(*flexvolContainer.SecurityContext.RunAsNonRoot).To(BeFalse())
-		Expect(*flexvolContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
-		Expect(flexvolContainer.SecurityContext.Capabilities).To(Equal(
-			&corev1.Capabilities{
-				Drop: []corev1.Capability{"ALL"},
-			},
-		))
-		Expect(flexvolContainer.SecurityContext.SeccompProfile).To(Equal(
-			&corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			}))
 	} else {
-		Expect(flexvolContainer).To(BeNil())
+		Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
+		Expect(flexvolContainer.Command).To(BeEmpty())
 	}
+
+	Expect(*flexvolContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
+	Expect(*flexvolContainer.SecurityContext.Privileged).To(BeTrue())
+	Expect(*flexvolContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+	Expect(*flexvolContainer.SecurityContext.RunAsNonRoot).To(BeFalse())
+	Expect(*flexvolContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+	Expect(flexvolContainer.SecurityContext.Capabilities).To(Equal(
+		&corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+	))
+	Expect(flexvolContainer.SecurityContext.SeccompProfile).To(Equal(
+		&corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		}))
 }

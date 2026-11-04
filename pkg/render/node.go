@@ -985,9 +985,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		annotations[bgpLayoutHashAnnotation] = rmeta.AnnotationHash(c.cfg.BGPLayouts.Data)
 	}
 
-	if c.cfg.Installation.FlexVolumePath != "None" {
-		initContainers = append(initContainers, c.flexVolumeContainer())
-	}
+	initContainers = append(initContainers, c.flexVolumeContainer())
 
 	// Mount the bpf fs for the node container.
 	// This is required for the BPF dataplane, but also for the other dataplanes
@@ -1154,14 +1152,15 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	}
 
 	// Create and append flexvolume
-	if c.cfg.Installation.FlexVolumePath != "None" {
-		volumes = append(volumes, corev1.Volume{
-			Name: "flexvol-driver-host",
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{Path: c.cfg.Installation.FlexVolumePath + "nodeagent~uds", Type: &dirOrCreate},
-			},
-		})
+	flexVolumeHostPath := &corev1.HostPathVolumeSource{Path: c.cfg.Installation.FlexVolumePath + "nodeagent~uds", Type: &dirOrCreate}
+	if c.flexVolumeDisabled() {
+		root, _ := flexVolumeRoot(c.cfg.Installation.KubernetesProvider)
+		flexVolumeHostPath = &corev1.HostPathVolumeSource{Path: root, Type: &dirMustExist}
 	}
+	volumes = append(volumes, corev1.Volume{
+		Name:         "flexvol-driver-host",
+		VolumeSource: corev1.VolumeSource{HostPath: flexVolumeHostPath},
+	})
 	if c.cfg.BirdTemplates != nil {
 		volumes = append(volumes,
 			corev1.Volume{
@@ -1282,22 +1281,55 @@ func (c *nodeComponent) cniPluginsContainer() corev1.Container {
 	}
 }
 
+func DefaultFlexVolumePath(provider operatorv1.Provider) string {
+	root, rel := flexVolumeRoot(provider)
+	return filepath.Join(root, rel) + "/"
+}
+
+// The root always exists on that platform, so it can be mounted without kubelet creating it on a read-only /usr.
+func flexVolumeRoot(provider operatorv1.Provider) (string, string) {
+	switch {
+	case provider.IsOpenShift():
+		// In OpenShift 4.x, the location for flexvolume plugins has changed.
+		// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5
+		return "/etc/kubernetes", "kubelet-plugins/volume/exec"
+	case provider.IsGKE():
+		return "/home/kubernetes", "flexvolume"
+	case provider.IsAKS():
+		return "/etc/kubernetes", "volumeplugins"
+	case provider.IsRKE2():
+		return "/var/lib/kubelet", "volumeplugins"
+	default:
+		return "/usr", "libexec/kubernetes/kubelet-plugins/volume/exec"
+	}
+}
+
+func (c *nodeComponent) flexVolumeDisabled() bool {
+	return c.cfg.Installation.FlexVolumePath == "None"
+}
+
 // flexVolumeContainer creates the node's init container that installs the Unix Domain Socket to allow Dikastes
 // to communicate with Felix over the Policy Sync API.
 func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 	flexVolumeMounts := []corev1.VolumeMount{
 		{MountPath: "/host/driver", Name: "flexvol-driver-host"},
 	}
-
-	var flexvolCommand []string
-	if c.useCombinedImage {
-		flexvolCommand = []string{components.CalicoBinaryPath, "component", "flexvol", "install", "--target", "/host/driver/uds"}
+	var command, args []string
+	_, rel := flexVolumeRoot(c.cfg.Installation.KubernetesProvider)
+	switch {
+	case c.useCombinedImage && c.flexVolumeDisabled():
+		command = []string{components.CalicoBinaryPath, "component", "flexvol", "install", "--if-present", "--target", filepath.Join("/host/driver", rel, "nodeagent~uds", "uds")}
+	case c.useCombinedImage:
+		command = []string{components.CalicoBinaryPath, "component", "flexvol", "install", "--target", "/host/driver/uds"}
+	case c.flexVolumeDisabled():
+		args = []string{"-p", "-t", filepath.Join("/host/driver", rel, "nodeagent~uds")}
 	}
 
 	return corev1.Container{
 		Name:            "flexvol-driver",
 		Image:           c.flexvolImage,
-		Command:         flexvolCommand,
+		Command:         command,
+		Args:            args,
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    flexVolumeMounts,
 	}

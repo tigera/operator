@@ -102,14 +102,14 @@ REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
 # The project Go version.
-GO_VERSION?=1.27.1
+GO_VERSION?=1.27.3
 # Version of Kubernetes to use for dependencies, tests, and kubectl.
-K8S_VERSION?=v1.37.0
+K8S_VERSION?=v1.37.2
 # The version of LLVM to use for the go-build image.
 LLVM_VERSION?=21.1.8
 # Calico toolchain versions and the calico/go-build image to use.
 GO_BUILD_VER?=$(GO_VERSION)-llvm$(LLVM_VERSION)-k8s$(K8S_VERSION:v%=%)
-CALICO_BASE_VER ?= ubi9-1790191092
+CALICO_BASE_VER ?= ubi9-1793230880
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -262,7 +262,7 @@ endif
 
 # To update the Istio version, see "Updating the bundled version of Istio" in docs/common_tasks.md.
 ISTIO_HELM_REPO ?= https://istio-release.storage.googleapis.com/charts
-ISTIO_VERSION ?= 1.29.8
+ISTIO_VERSION ?= 1.29.10
 ISTIO_RESOURCES_DIR = pkg/render/istio
 ISTIO_CHARTS = base istiod cni ztunnel
 ISTIO_CHART_FILES = $(addprefix $(ISTIO_RESOURCES_DIR)/,$(addsuffix .tgz,$(ISTIO_CHARTS)))
@@ -277,7 +277,7 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.9.1
+ENVOY_GATEWAY_VERSION ?= v1.9.3
 ENVOY_GATEWAY_CHART = pkg/render/gatewayapi/gateway-helm.tgz
 
 $(ENVOY_GATEWAY_CHART): $(HACK_BIN)/helm-$(BUILDARCH)

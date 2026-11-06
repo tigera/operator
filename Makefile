@@ -682,19 +682,40 @@ ifdef LOCAL_BUILD
 endif
 
 check-milestone: hack/bin/gh var-require-all-VERSION-GITHUB_TOKEN
-	@gh extension install valeriobelli/gh-milestone
-	@echo "Checking milestone $(VERSION) exists"
-	$(eval MILESTONE_NUMBER := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state all --json title --jq '.[0].title' | grep $(VERSION)))
-	$(if $(MILESTONE_NUMBER),,$(error Milestone $(VERSION) does not exist))
-	@echo "Checking $(VERSION) milestone has no open PRs"
-	$(eval OPEN_PRS := $(shell gh search prs --milestone $(VERSION) --repo $(REPO) --state open --json number --jq '.[].number'))
-	$(if $(OPEN_PRS),$(error Milestone $(VERSION) has open PRs))
-	@echo "Checking milestone $(VERSION) is closed"
-	$(eval CLOSED_MILESTONE := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state closed --json title --jq '.[0].title' | grep $(VERSION)))
-	$(if $(CLOSED_MILESTONE),,$(error Milestone $(VERSION) is not closed))
+	@set -e; \
+	errors=0; \
+	repo_url="https://github.com/$(REPO)"; \
+	next_version=$$(echo "$(VERSION)" | awk -F. -v OFS=. '{$$NF=$$NF+1; print}'); \
+	milestones=$$(gh api "repos/$(REPO)/milestones?state=all&per_page=100" --paginate --jq '.[] | "\(.title) \(.number) \(.state)"'); \
+	current=$$(echo "$$milestones" | awk -v t="$(VERSION)" '$$1 == t'); \
+	echo "Checking milestone $(VERSION) exists"; \
+	if [ -z "$$current" ]; then \
+		echo "ERROR: Milestone $(VERSION) does not exist. Create it: $$repo_url/milestones/new"; \
+		errors=1; \
+	else \
+		number=$$(echo "$$current" | awk '{print $$2}'); \
+		state=$$(echo "$$current" | awk '{print $$3}'); \
+		echo "Checking milestone $(VERSION) is closed"; \
+		if [ "$$state" != "closed" ]; then \
+			echo "ERROR: Milestone $(VERSION) is not closed: $$repo_url/milestone/$$number"; \
+			errors=1; \
+		fi; \
+		echo "Checking milestone $(VERSION) has no open PRs"; \
+		open_prs=$$(gh search prs --milestone "$(VERSION)" --repo $(REPO) --state open --json number --jq '.[].number'); \
+		if [ -n "$$open_prs" ]; then \
+			echo "ERROR: Milestone $(VERSION) has open PRs: $$repo_url/pulls?q=is%3Apr+is%3Aopen+milestone%3A$(VERSION)"; \
+			errors=1; \
+		fi; \
+	fi; \
+	echo "Checking next milestone $$next_version exists"; \
+	if [ -z "$$(echo "$$milestones" | awk -v t="$$next_version" '$$1 == t')" ]; then \
+		echo "ERROR: Next milestone $$next_version does not exist. Create it: $$repo_url/milestones/new"; \
+		errors=1; \
+	fi; \
+	if [ "$$errors" -ne 0 ]; then echo "Milestone checks failed"; exit 1; fi
 
 release-prep: check-milestone var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
-	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
+	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | (.components[] | select(key | test(\"^(eck-|coreos-)\") | not) | .version) = \"$(CALICO_ENTERPRISE_VERSION)\"" -i config/enterprise_versions.yml
 	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
 	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
 	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go

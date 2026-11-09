@@ -815,6 +815,14 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 	if pr.cfg.TrustedBundle != nil {
 		bundleVolume := pr.cfg.TrustedBundle.Volume()
 		bundleMounts := pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())
+		// Envoy Gateway reads BackendTLSPolicy wellKnownCACertificates: System from a fixed path.
+		for _, m := range bundleMounts {
+			if m.SubPath == certificatemanagement.RHELRootCertificateBundleName {
+				m.MountPath = "/etc/ssl/certs/ca-certificates.crt"
+				bundleMounts = append(bundleMounts, m)
+				break
+			}
+		}
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
 			ds := envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet
 			ds.Pod.Volumes = append(ds.Pod.Volumes, bundleVolume)

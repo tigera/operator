@@ -865,6 +865,12 @@ var _ = Describe("Gateway API rendering tests", func() {
 			proxyMountPaths = append(proxyMountPaths, m.MountPath)
 		}
 		Expect(proxyMountPaths).To(ContainElement("/etc/pki/tls/certs"))
+		Expect(dep.Container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+			Name:      certificatemanagement.TrustedCertConfigMapName,
+			MountPath: "/etc/ssl/certs/ca-certificates.crt",
+			SubPath:   certificatemanagement.RHELRootCertificateBundleName,
+			ReadOnly:  true,
+		}))
 	})
 
 	It("should not deploy waf-http-filter or l7-log-collector for open-source", func() {

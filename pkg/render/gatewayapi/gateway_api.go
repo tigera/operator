@@ -18,6 +18,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 
@@ -832,15 +833,24 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			bundleMounts[i].Name = v.Name
 			bundleVolumes = append(bundleVolumes, v)
 		}
+		// Restart the proxy pods when the bundle changes; subPath mounts never refresh in place.
+		var pod *envoyapi.KubernetesPodSpec
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
 			ds := envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet
-			ds.Pod.Volumes = append(ds.Pod.Volumes, bundleVolumes...)
 			ds.Container.VolumeMounts = append(ds.Container.VolumeMounts, bundleMounts...)
+			pod = ds.Pod
 		} else {
 			dep := envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment
-			dep.Pod.Volumes = append(dep.Pod.Volumes, bundleVolumes...)
 			dep.Container.VolumeMounts = append(dep.Container.VolumeMounts, bundleMounts...)
+			pod = dep.Pod
 		}
+		pod.Volumes = append(pod.Volumes, bundleVolumes...)
+		annotations := maps.Clone(pod.Annotations)
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		maps.Copy(annotations, pr.cfg.TrustedBundle.HashAnnotations())
+		pod.Annotations = annotations
 	}
 
 	// Apply overrides.

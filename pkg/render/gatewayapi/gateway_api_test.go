@@ -886,6 +886,12 @@ var _ = Describe("Gateway API rendering tests", func() {
 			}
 		}
 		Expect(seen).To(HaveLen(3))
+
+		// A bundle change must roll the proxy pods, since subPath mounts never refresh.
+		Expect(bundle.HashAnnotations()).NotTo(BeEmpty())
+		for k, v := range bundle.HashAnnotations() {
+			Expect(dep.Pod.Annotations).To(HaveKeyWithValue(k, v))
+		}
 	})
 
 	It("should not deploy waf-http-filter or l7-log-collector for open-source", func() {

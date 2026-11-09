@@ -864,13 +864,28 @@ var _ = Describe("Gateway API rendering tests", func() {
 		for _, m := range dep.Container.VolumeMounts {
 			proxyMountPaths = append(proxyMountPaths, m.MountPath)
 		}
-		Expect(proxyMountPaths).To(ContainElement("/etc/pki/tls/certs"))
-		Expect(dep.Container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
-			Name:      certificatemanagement.TrustedCertConfigMapName,
-			MountPath: "/etc/ssl/certs/ca-certificates.crt",
-			SubPath:   certificatemanagement.RHELRootCertificateBundleName,
-			ReadOnly:  true,
-		}))
+		Expect(proxyMountPaths).To(ContainElements("/etc/pki/tls/certs", "/etc/pki/tls/cert.pem", "/etc/ssl/certs/ca-certificates.crt"))
+
+		// Envoy Gateway keeps one container mount per volume name, so every bundle mount
+		// needs its own volume, each backed by the bundle ConfigMap.
+		bundleVols := map[string]bool{}
+		for _, v := range dep.Pod.Volumes {
+			if v.ConfigMap != nil && v.ConfigMap.Name == certificatemanagement.TrustedCertConfigMapName {
+				bundleVols[v.Name] = true
+			}
+		}
+		seen := map[string]bool{}
+		for _, m := range dep.Container.VolumeMounts {
+			if !bundleVols[m.Name] {
+				continue
+			}
+			Expect(seen).NotTo(HaveKey(m.Name), "volume %s mounted twice", m.Name)
+			seen[m.Name] = true
+			if m.MountPath == "/etc/ssl/certs/ca-certificates.crt" {
+				Expect(m.SubPath).To(Equal(certificatemanagement.RHELRootCertificateBundleName))
+			}
+		}
+		Expect(seen).To(HaveLen(3))
 	})
 
 	It("should not deploy waf-http-filter or l7-log-collector for open-source", func() {

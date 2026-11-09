@@ -823,13 +823,22 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				break
 			}
 		}
+		// Envoy Gateway merges container volumeMounts by name, so mounts that share a volume
+		// name collapse to the last one. Give each mount its own volume over the same ConfigMap.
+		bundleVolumes := []corev1.Volume{bundleVolume}
+		for i := 1; i < len(bundleMounts); i++ {
+			v := *bundleVolume.DeepCopy()
+			v.Name = fmt.Sprintf("%s-%d", bundleVolume.Name, i)
+			bundleMounts[i].Name = v.Name
+			bundleVolumes = append(bundleVolumes, v)
+		}
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
 			ds := envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet
-			ds.Pod.Volumes = append(ds.Pod.Volumes, bundleVolume)
+			ds.Pod.Volumes = append(ds.Pod.Volumes, bundleVolumes...)
 			ds.Container.VolumeMounts = append(ds.Container.VolumeMounts, bundleMounts...)
 		} else {
 			dep := envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment
-			dep.Pod.Volumes = append(dep.Pod.Volumes, bundleVolume)
+			dep.Pod.Volumes = append(dep.Pod.Volumes, bundleVolumes...)
 			dep.Container.VolumeMounts = append(dep.Container.VolumeMounts, bundleMounts...)
 		}
 	}

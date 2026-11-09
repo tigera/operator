@@ -18,6 +18,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 
@@ -31,6 +32,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -421,6 +423,11 @@ type GatewayAPIImplementationConfig struct {
 	CustomEnvoyGateway    *envoyapi.EnvoyGateway
 	CustomEnvoyProxies    map[string]*envoyapi.EnvoyProxy
 	CurrentGatewayClasses set.Set[string]
+	// TrustedBundle carries the public CA bundle (extracted from the operator's UBI
+	// base image) plus Calico's internal CA. Mounted on the envoy-gateway controller
+	// and on every provisioned envoy-proxy pod so outbound TLS (OCI wasm fetch,
+	// JWT/OIDC providers, public upstreams, tracing exporters) can validate peers.
+	TrustedBundle certificatemanagement.TrustedBundle
 }
 
 type gatewayAPIImplementationComponent struct {
@@ -620,6 +627,13 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	objs = append(objs, envoyGatewayConfigMap)
 
+	// Ship the operator's trust bundle (public CAs + Calico CA) into the gateway
+	// namespace as a ConfigMap so it can be mounted on both the envoy-gateway
+	// controller and every provisioned envoy-proxy pod.
+	if pr.cfg.TrustedBundle != nil {
+		objs = append(objs, pr.cfg.TrustedBundle.ConfigMap(resources.namespace.Name))
+	}
+
 	// Deep copy the controller deployment,
 	controllerDeployment := resources.controllerDeployment.DeepCopyObject().(*appsv1.Deployment)
 
@@ -633,6 +647,29 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	// Add a k8s-app label that we can use to provide API access for the controller.
 	controllerDeployment.Spec.Template.Labels["k8s-app"] = GatewayControllerLabel
+
+	// Mount the trust bundle on the envoy-gateway controller. The controller pulls
+	// wasm OCI images and may call out to JWT/OIDC providers, both of which need
+	// public CA roots to validate TLS.
+	if pr.cfg.TrustedBundle != nil {
+		controllerDeployment.Spec.Template.Spec.Volumes = append(
+			controllerDeployment.Spec.Template.Spec.Volumes,
+			pr.cfg.TrustedBundle.Volume(),
+		)
+		bundleMounts := pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())
+		for i := range controllerDeployment.Spec.Template.Spec.Containers {
+			controllerDeployment.Spec.Template.Spec.Containers[i].VolumeMounts = append(
+				controllerDeployment.Spec.Template.Spec.Containers[i].VolumeMounts,
+				bundleMounts...,
+			)
+		}
+		if controllerDeployment.Spec.Template.Annotations == nil {
+			controllerDeployment.Spec.Template.Annotations = map[string]string{}
+		}
+		for k, v := range pr.cfg.TrustedBundle.HashAnnotations() {
+			controllerDeployment.Spec.Template.Annotations[k] = v
+		}
+	}
 
 	// Apply customizations from the GatewayControllerDeployment field of the GatewayAPI CR.
 	rcomp.ApplyDeploymentOverrides(controllerDeployment, pr.cfg.GatewayAPI.Spec.GatewayControllerDeployment)
@@ -770,6 +807,50 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container = &envoyapi.KubernetesContainerSpec{}
 		}
 		envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Image = &pr.envoyProxyImage
+	}
+
+	// Mount the operator's trust bundle on the data-plane envoy-proxy pod so that
+	// outbound TLS (wasm OCI fetch, JWT/OIDC, HTTPS upstreams, tracing exporters)
+	// can validate public CAs. The bundle is the same ConfigMap mounted on the
+	// envoy-gateway controller, in the same namespace as the proxy.
+	if pr.cfg.TrustedBundle != nil {
+		bundleVolume := pr.cfg.TrustedBundle.Volume()
+		bundleMounts := pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())
+		// Envoy Gateway reads BackendTLSPolicy wellKnownCACertificates: System from a fixed path.
+		for _, m := range bundleMounts {
+			if m.SubPath == certificatemanagement.RHELRootCertificateBundleName {
+				m.MountPath = "/etc/ssl/certs/ca-certificates.crt"
+				bundleMounts = append(bundleMounts, m)
+				break
+			}
+		}
+		// Envoy Gateway merges container volumeMounts by name, so mounts that share a volume
+		// name collapse to the last one. Give each mount its own volume over the same ConfigMap.
+		bundleVolumes := []corev1.Volume{bundleVolume}
+		for i := 1; i < len(bundleMounts); i++ {
+			v := *bundleVolume.DeepCopy()
+			v.Name = fmt.Sprintf("%s-%d", bundleVolume.Name, i)
+			bundleMounts[i].Name = v.Name
+			bundleVolumes = append(bundleVolumes, v)
+		}
+		// Restart the proxy pods when the bundle changes; subPath mounts never refresh in place.
+		var pod *envoyapi.KubernetesPodSpec
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
+			ds := envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet
+			ds.Container.VolumeMounts = append(ds.Container.VolumeMounts, bundleMounts...)
+			pod = ds.Pod
+		} else {
+			dep := envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment
+			dep.Container.VolumeMounts = append(dep.Container.VolumeMounts, bundleMounts...)
+			pod = dep.Pod
+		}
+		pod.Volumes = append(pod.Volumes, bundleVolumes...)
+		annotations := maps.Clone(pod.Annotations)
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		maps.Copy(annotations, pr.cfg.TrustedBundle.HashAnnotations())
+		pod.Annotations = annotations
 	}
 
 	// Apply overrides.

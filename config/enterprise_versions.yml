@@ -108,14 +108,14 @@ components:
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
-    version: v3.13.2
+    version: v3.14.0
   prometheus:
     image: prometheus
     version: v3.23.4
   # coreos-alertmanager holds the version of alertmanager built for tigera/alertmanager,
   # which prometheus operator uses to validate.
   coreos-alertmanager:
-    version: v0.33.1
+    version: v0.34.0
   alertmanager:
     image: alertmanager
     version: v3.23.4
@@ -140,7 +140,7 @@ components:
   # eck-elasticsearch-operator holds the version of the ECK operator used to manage
   # Elasticsearch
   eck-elasticsearch-operator:
-    version: 3.4.1
+    version: 3.5.0
   l7-collector:
     image: l7-collector
     version: v3.23.4

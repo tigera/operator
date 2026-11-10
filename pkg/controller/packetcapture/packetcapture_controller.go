@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -135,7 +136,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		if errors.IsNotFound(err) {
 			reqLogger.V(3).Info("PacketCaptureAPI CR not found", "err", err)
 			r.status.OnCRNotFound()
-			return reconcile.Result{}, nil
+			return reconcile.Result{}, r.removePacketCapture(ctx, reqLogger)
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying PacketCapture", err, reqLogger)
 		return reconcile.Result{}, err
@@ -322,4 +323,22 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcilePacketCapture) removePacketCapture(ctx context.Context, reqLogger logr.Logger) error {
+	cfg := &render.PacketCaptureApiConfiguration{OpenShift: r.opts.DetectedProvider.IsOpenShift(), Disabled: true}
+	components := []render.Component{render.PacketCaptureAPI(cfg)}
+	// Deleting the namespace removes the policies too, so they can wait for the API server rather than block on it.
+	if utils.IsProjectCalicoV3Available(r.client, r.opts, reqLogger) {
+		components = append(components, render.PacketCaptureAPIPolicy(cfg))
+	}
+
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	for _, component := range components {
+		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
+			reqLogger.Error(err, "Error removing packet capture resources")
+			return err
+		}
+	}
+	return nil
 }

@@ -1,6 +1,6 @@
 module github.com/tigera/operator/api
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/envoyproxy/gateway v1.7.4

@@ -58,6 +58,9 @@ spec:
                     - pendingDeletion
                   type: string
                 type:
+                  enum:
+                    - host
+                    - virtual
                   type: string
               required:
                 - cidr

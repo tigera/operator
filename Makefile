@@ -233,7 +233,7 @@ else
 endif
 
 # To update the Istio version, see "Updating the bundled version of Istio" in docs/common_tasks.md.
-ISTIO_HELM_REPO ?= https://istio-release.storage.googleapis.com/charts
+ISTIO_HELM_REPO ?= https://blob.istio.io/istio-release/charts
 ISTIO_VERSION ?= 1.28.1
 ISTIO_RESOURCES_DIR = pkg/render/istio
 ISTIO_CHARTS = base istiod cni ztunnel

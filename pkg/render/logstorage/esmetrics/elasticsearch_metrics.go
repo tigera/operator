@@ -239,7 +239,7 @@ func (e *elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 							SecurityContext: sc,
 							Command:         []string{"/bin/elasticsearch_exporter"},
 							Args: []string{
-								"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
+								"--es.uri=https://$(ELASTIC_HOST):$(ELASTIC_PORT)",
 								"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 								"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 								"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath),
@@ -249,8 +249,11 @@ func (e *elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 								e.cfg.ServerTLS.VolumeMount(e.SupportedOSType()),
 							),
 							Env: []corev1.EnvVar{
-								relasticsearch.ElasticUsernameEnvVar(ElasticsearchMetricsSecret),
-								relasticsearch.ElasticPasswordEnvVar(ElasticsearchMetricsSecret),
+								// The exporter reads its credentials from ES_USERNAME and ES_PASSWORD. Credentials in
+								// --es.uri would be readable from the process command line, which flow logs record
+								// when process path collection is on.
+								{Name: "ES_USERNAME", ValueFrom: secret.GetEnvVarSource(ElasticsearchMetricsSecret, "username", false)},
+								{Name: "ES_PASSWORD", ValueFrom: secret.GetEnvVarSource(ElasticsearchMetricsSecret, "password", false)},
 								relasticsearch.ElasticHostEnvVar(esHost),
 								relasticsearch.ElasticPortEnvVar(esPort),
 								relasticsearch.ElasticCAEnvVar(e.SupportedOSType()),

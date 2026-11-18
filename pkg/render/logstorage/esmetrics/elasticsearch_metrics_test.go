@@ -166,7 +166,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 								Image:   "testregistry.com/tigera/elasticsearch-metrics@testdigest",
 								Command: []string{"/bin/elasticsearch_exporter"},
 								Args: []string{
-									"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
+									"--es.uri=https://$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key",
@@ -175,7 +175,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 								},
 								Env: []corev1.EnvVar{
 									{
-										Name: "ELASTIC_USERNAME",
+										Name: "ES_USERNAME",
 										ValueFrom: &corev1.EnvVarSource{
 											SecretKeyRef: &corev1.SecretKeySelector{
 												LocalObjectReference: corev1.LocalObjectReference{
@@ -186,7 +186,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 										},
 									},
 									{
-										Name: "ELASTIC_PASSWORD",
+										Name: "ES_PASSWORD",
 										ValueFrom: &corev1.EnvVarSource{
 											SecretKeyRef: &corev1.SecretKeySelector{
 												LocalObjectReference: corev1.LocalObjectReference{
@@ -221,6 +221,11 @@ var _ = Describe("Elasticsearch metrics", func() {
 			Expect(deploy.Spec.Template.Spec.Containers[0].VolumeMounts).To(Equal(expectedDeploy.Spec.Template.Spec.Containers[0].VolumeMounts))
 			Expect(deploy.Spec.Template.Spec.Containers[0].Args).To(Equal(expectedDeploy.Spec.Template.Spec.Containers[0].Args))
 			Expect(deploy.Spec.Template.Spec.Containers[0].Env).To(Equal(expectedDeploy.Spec.Template.Spec.Containers[0].Env))
+			// The command line is visible to anything that can read /proc, so credentials must stay out of it.
+			for _, arg := range deploy.Spec.Template.Spec.Containers[0].Args {
+				Expect(arg).NotTo(ContainSubstring("USERNAME"))
+				Expect(arg).NotTo(ContainSubstring("PASSWORD"))
+			}
 			Expect(deploy.Spec.Template.Spec.Containers[0].Command).To(Equal(expectedDeploy.Spec.Template.Spec.Containers[0].Command))
 
 			Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())

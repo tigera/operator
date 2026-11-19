@@ -355,16 +355,15 @@ func (es *elasticsearchComponent) resourceRequirements() corev1.ResourceRequirem
 }
 
 func (es *elasticsearchComponent) javaOpts() string {
-	var javaOpts string
-	resources := es.resourceRequirements()
+	heapSize := "2G"
 	if es.cfg.LogStorage.Spec.Nodes != nil && es.cfg.LogStorage.Spec.Nodes.ResourceRequirements != nil {
 		// Now extract the memory request value to compute the recommended heap size for ES container
-		recommendedHeapSize := memoryQuantityToJVMHeapSize(resources.Requests.Memory())
-		javaOpts = fmt.Sprintf("-Xms%v -Xmx%v", recommendedHeapSize, recommendedHeapSize)
-	} else {
-		javaOpts = "-Xms2G -Xmx2G"
+		resources := es.resourceRequirements()
+		heapSize = memoryQuantityToJVMHeapSize(resources.Requests.Memory())
 	}
-	return javaOpts
+	// Disabling the Base64 intrinsics mitigates CVE-2026-114938 in the bundled JDK. Unlike -XX:UseAVX=2,
+	// this flag is accepted on ARM64 too, so it is safe on mixed-arch clusters.
+	return fmt.Sprintf("-Xms%v -Xmx%v -XX:-UseBASE64Intrinsics", heapSize, heapSize)
 }
 
 // Generate the pod template required for the ElasticSearch nodes (controls the ElasticSearch container)

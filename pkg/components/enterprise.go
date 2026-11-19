@@ -162,7 +162,7 @@ var (
 	}
 
 	ComponentManager = Component{
-		Version:  "v3.22.9",
+		Version:  "v3.22.9-hotfix1",
 		Image:    "tigera/manager",
 		Registry: "",
 	}

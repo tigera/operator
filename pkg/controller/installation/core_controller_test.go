@@ -36,6 +36,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -2534,6 +2535,46 @@ var _ = Describe("Testing core-controller installation", func() {
 				}
 			}
 			Expect(numCreated).To(Equal(len(render.CNIPluginFinalizedObjects())))
+		})
+
+		Context("CRD variant with an 'overlay' Installation", func() {
+			// The AKS upgrade from Calico leaves 'default' at Calico and sets the Enterprise variant only in 'overlay'.
+			setDefaultVariant := func(v operator.ProductVariant) {
+				inst := &operator.Installation{}
+				Expect(c.Get(ctx, utils.DefaultInstanceKey, inst)).NotTo(HaveOccurred())
+				inst.Spec.Variant = v
+				Expect(c.Update(ctx, inst)).NotTo(HaveOccurred())
+			}
+			crdCreated := func(name string) bool {
+				for _, o := range componentHandler.objectsToCreate {
+					if _, ok := o.(*apiextenv1.CustomResourceDefinition); ok && o.GetName() == name {
+						return true
+					}
+				}
+				return false
+			}
+
+			BeforeEach(func() {
+				r.manageCRDs = true
+				setDefaultVariant(operator.Calico)
+			})
+
+			It("should install the Enterprise CRDs when only 'overlay' sets the Enterprise variant", func() {
+				Expect(c.Create(ctx, &operator.Installation{
+					ObjectMeta: metav1.ObjectMeta{Name: "overlay"},
+					Spec:       operator.InstallationSpec{Variant: operator.TigeraSecureEnterprise},
+				})).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(crdCreated("licensekeys.crd.projectcalico.org")).To(BeTrue())
+			})
+
+			It("should install only the Calico CRDs when neither 'default' nor 'overlay' sets the Enterprise variant", func() {
+				_, _ = r.Reconcile(ctx, reconcile.Request{})
+				Expect(crdCreated("felixconfigurations.crd.projectcalico.org")).To(BeTrue())
+				Expect(crdCreated("licensekeys.crd.projectcalico.org")).To(BeFalse())
+			})
 		})
 	})
 })

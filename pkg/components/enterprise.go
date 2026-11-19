@@ -204,7 +204,7 @@ var (
 	}
 
 	ComponentManager = Component{
-		Version:   "v3.23.4",
+		Version:   "v3.23.4-hotfix1",
 		Image:     "manager",
 		Registry:  "",
 		imagePath: "",

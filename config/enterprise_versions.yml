@@ -5,7 +5,7 @@ components:
     version: v3.23.4
   manager:
     image: manager
-    version: v3.23.4
+    version: v3.23.4-hotfix1
   voltron:
     image: voltron
     version: v3.23.4

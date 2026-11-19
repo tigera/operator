@@ -18,7 +18,7 @@ components:
   goldmane:
     version: v3.32.0
   flexvol:
-    version: v3.32.0
+    version: v3.32.4
   apiserver:
     version: v3.32.0
   csi:

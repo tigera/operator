@@ -70,6 +70,10 @@ type PacketCaptureApiConfiguration struct {
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 
 	PacketCaptureAPI *operatorv1.PacketCaptureAPI
+
+	// Disabled renders the component for removal. Before PacketCaptureAPI was opt-in these objects were owned by the
+	// APIServer CR, so upgraded clusters without a PacketCaptureAPI CR still carry them and nothing garbage collects them.
+	Disabled bool
 }
 
 type packetCaptureApiComponent struct {
@@ -84,13 +88,17 @@ func PacketCaptureAPI(cfg *PacketCaptureApiConfiguration) Component {
 }
 
 func PacketCaptureAPIPolicy(cfg *PacketCaptureApiConfiguration) Component {
-	return NewPassthrough(
-		[]client.Object{calicoSystemPolicy(cfg)},
-		[]client.Object{
-			// allow-tigera Tier was renamed to calico-system
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-packetcapture", PacketCaptureNamespace),
-		},
-	)
+	// allow-tigera Tier was renamed to calico-system, and it cannot be deleted while this policy is in it.
+	toDelete := []client.Object{
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-packetcapture", PacketCaptureNamespace),
+	}
+	if cfg.Disabled {
+		return NewDeletionPassthrough(append(toDelete, &v3.NetworkPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+			ObjectMeta: metav1.ObjectMeta{Name: PacketCapturePolicyName, Namespace: PacketCaptureNamespace},
+		})...)
+	}
+	return NewPassthrough([]client.Object{calicoSystemPolicy(cfg)}, toDelete)
 }
 
 func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -111,6 +119,17 @@ func (pc *packetCaptureApiComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object) {
+	if pc.cfg.Disabled {
+		return nil, []client.Object{
+			&corev1.Namespace{
+				TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: PacketCaptureNamespace},
+			},
+			pc.clusterRole(),
+			pc.clusterRoleBinding(),
+		}
+	}
+
 	objs := []client.Object{
 		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider, PSSRestricted, pc.cfg.Installation.Azure),
 	}

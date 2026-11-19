@@ -5,7 +5,7 @@ components:
     version: v3.22.9
   manager:
     image: tigera/manager
-    version: v3.22.9
+    version: v3.22.9-hotfix1
   voltron:
     image: tigera/voltron
     version: v3.22.9

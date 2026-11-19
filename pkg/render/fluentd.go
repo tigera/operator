@@ -333,7 +333,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.fluentdServiceAccount())
 	if c.cfg.PacketCapture != nil {
 		objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
-	} else {
+	} else if c.cfg.OSType == rmeta.OSTypeLinux {
 		// Clusters that once had packet capture keep this pair, which would otherwise bind
 		// pods/exec to a service account in a namespace that no longer exists.
 		toDelete = append(toDelete, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())

@@ -677,10 +677,11 @@ var _ = Describe("Typha rendering tests", func() {
 				},
 			}))
 
-			// At runtime, the operator will also add some standard labels to the
-			// deployment such as "k8s-app=calico-typha". But the deployment object
-			// produced by the render will have no labels so we expect just the one
-			// provided.
+			// At runtime, the operator's setStandardSelectorAndLabels helper
+			// adds standard labels such as "k8s-app=calico-typha" and the
+			// host-networked marker. The deployment object produced by the
+			// render itself only carries the override-supplied template-level
+			// label; the rest are layered on during apply.
 			Expect(d.Spec.Template.Labels).To(HaveLen(1))
 			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
 

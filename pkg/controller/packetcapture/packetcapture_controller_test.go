@@ -305,6 +305,39 @@ var _ = Describe("packet capture controller tests", func() {
 		})
 	})
 
+	Context("PacketCaptureAPI CR not found", func() {
+		BeforeEach(func() {
+			Expect(cli.Delete(ctx, &operatorv1.PacketCaptureAPI{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+			mockStatus.On("OnCRNotFound").Return()
+		})
+
+		It("should remove packet capture resources left behind by older operators", func() {
+			leftovers := []client.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureNamespace}},
+				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureClusterRoleName}},
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureClusterRoleBindingName}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.tigera-packetcapture", Namespace: render.PacketCaptureNamespace}},
+			}
+			for _, obj := range leftovers {
+				Expect(cli.Create(ctx, obj)).NotTo(HaveOccurred())
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			for _, obj := range leftovers {
+				err := cli.Get(ctx, client.ObjectKeyFromObject(obj), obj)
+				Expect(errors.IsNotFound(err)).To(BeTrue(), "%T %s was not deleted", obj, obj.GetName())
+			}
+			mockStatus.AssertCalled(GinkgoT(), "OnCRNotFound")
+		})
+
+		It("should succeed when there is nothing to remove", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+		})
+	})
+
 	Context("calico-system reconciliation", func() {
 		var readyFlag *utils.ReadyFlag
 

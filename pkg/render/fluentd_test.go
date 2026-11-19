@@ -102,6 +102,16 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}))
 	})
 
+	It("should delete the packet capture pod-exec role and binding when PacketCaptureAPI is absent", func() {
+		cfg.PacketCapture = nil
+		toCreate, toDelete := render.Fluentd(cfg).Objects()
+
+		Expect(rtest.GetResource(toCreate, render.PacketCaptureAPIRole, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "Role")).To(BeNil())
+		Expect(rtest.GetResource(toCreate, render.PacketCaptureAPIRoleBinding, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding")).To(BeNil())
+		Expect(rtest.GetResource(toDelete, render.PacketCaptureAPIRole, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "Role")).NotTo(BeNil())
+		Expect(rtest.GetResource(toDelete, render.PacketCaptureAPIRoleBinding, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding")).NotTo(BeNil())
+	})
+
 	It("should render with a default configuration", func() {
 		expectedResources := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
@@ -295,6 +305,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		expectedDeleteResources := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.allow-fluentd-node", Namespace: render.LogCollectorNamespace}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}},
 		}
 
 		// Should render the correct resources.

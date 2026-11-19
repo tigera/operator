@@ -456,6 +456,29 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		)
 	})
 
+	Context("disabled", func() {
+		cfg := &render.PacketCaptureApiConfiguration{Disabled: true}
+
+		It("should only delete the packet capture resources", func() {
+			toCreate, toDelete := render.PacketCaptureAPI(cfg).Objects()
+			Expect(toCreate).To(BeEmpty())
+			rtest.ExpectResources(toDelete, []client.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureClusterRoleName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureClusterRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			})
+		})
+
+		It("should only delete the policies, including the one in the deprecated allow-tigera tier", func() {
+			toCreate, toDelete := render.PacketCaptureAPIPolicy(cfg).Objects()
+			Expect(toCreate).To(BeEmpty())
+			rtest.ExpectResources(toDelete, []client.Object{
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.tigera-packetcapture", Namespace: render.PacketCaptureNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCapturePolicyName, Namespace: render.PacketCaptureNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+			})
+		})
+	})
+
 	Context("reconcile resource requirements", func() {
 		It("should override container's resource request and render init container with default values", func() {
 			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())

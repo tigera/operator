@@ -31,6 +31,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,6 +42,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -48,6 +50,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -1102,6 +1105,108 @@ var _ = Describe("apiserver controller tests", func() {
 			err := validateAPIServerResource(instance)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("CalicoWebhooksDeployment"))
+		})
+	})
+
+	Context("ValidatingAdmissionPolicy ConfigMap params", func() {
+		servesVAPv1 := discovery.NewStaticAPIDiscovery(map[schema.GroupKind]string{
+			{Group: admission.APIGroup, Kind: admission.KindValidatingPolicy}: admission.VersionV1,
+		})
+
+		reconcileWith := func(useV3CRDs bool, d *discovery.APIDiscovery) {
+			r := ReconcileAPIServer{
+				ext:                 testExtensions.APIServer(),
+				client:              cli,
+				scheme:              scheme,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+				migrationWatchReady: &utils.ReadyFlag{},
+				opts: options.ControllerOptions{
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
+					UseV3CRDs:        useV3CRDs,
+					APIDiscovery:     d,
+				},
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+		}
+
+		createBoundPolicy := func(name, paramKind string) {
+			Expect(cli.Create(ctx, &admregv1.ValidatingAdmissionPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: name},
+				Spec: admregv1.ValidatingAdmissionPolicySpec{
+					ParamKind: &admregv1.ParamKind{APIVersion: "v1", Kind: paramKind},
+				},
+			})).To(Succeed())
+			Expect(cli.Create(ctx, &admregv1.ValidatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: name + "-binding"},
+				Spec:       admregv1.ValidatingAdmissionPolicyBindingSpec{PolicyName: name},
+			})).To(Succeed())
+		}
+
+		expectAccess := func(granted bool) {
+			cr := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ConfigMapParamsAccessName}}
+			crb := &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ConfigMapParamsAccessName}}
+			if !granted {
+				Expect(kerror.IsNotFound(test.GetResource(cli, cr))).To(BeTrue())
+				Expect(kerror.IsNotFound(test.GetResource(cli, crb))).To(BeTrue())
+				return
+			}
+			Expect(test.GetResource(cli, cr)).To(Succeed())
+			Expect(cr.Rules).To(ConsistOf(rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "list", "watch"},
+			}))
+			Expect(test.GetResource(cli, crb)).To(Succeed())
+			Expect(crb.Subjects).To(ConsistOf(rbacv1.Subject{
+				Kind:      "ServiceAccount",
+				Name:      render.APIServerServiceAccountName,
+				Namespace: render.APIServerNamespace,
+			}))
+		}
+
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, installation)).To(Succeed())
+		})
+
+		It("does not grant access when no bound policy takes a ConfigMap param", func() {
+			Expect(cli.Create(ctx, &admregv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: "unbound"},
+				Spec: admregv1.ValidatingAdmissionPolicySpec{ParamKind: &admregv1.ParamKind{APIVersion: "v1", Kind: "ConfigMap"}}})).To(Succeed())
+			createBoundPolicy("secret-param", "Secret")
+			reconcileWith(false, servesVAPv1)
+			expectAccess(false)
+		})
+
+		It("grants access when a bound policy takes a ConfigMap param", func() {
+			createBoundPolicy("clo-protected-sa-pods", "ConfigMap")
+			reconcileWith(false, servesVAPv1)
+			expectAccess(true)
+		})
+
+		It("keeps access after the policy and binding are removed", func() {
+			createBoundPolicy("clo-protected-sa-pods", "ConfigMap")
+			reconcileWith(false, servesVAPv1)
+			expectAccess(true)
+
+			Expect(cli.Delete(ctx, &admregv1.ValidatingAdmissionPolicyBinding{ObjectMeta: metav1.ObjectMeta{Name: "clo-protected-sa-pods-binding"}})).To(Succeed())
+			Expect(cli.Delete(ctx, &admregv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: "clo-protected-sa-pods"}})).To(Succeed())
+			reconcileWith(false, servesVAPv1)
+			expectAccess(true)
+		})
+
+		It("does not grant access when the cluster does not serve ValidatingAdmissionPolicy v1", func() {
+			createBoundPolicy("clo-protected-sa-pods", "ConfigMap")
+			reconcileWith(false, nil)
+			expectAccess(false)
+		})
+
+		It("does not grant access without an aggregation API server", func() {
+			createBoundPolicy("clo-protected-sa-pods", "ConfigMap")
+			reconcileWith(true, servesVAPv1)
+			expectAccess(false)
 		})
 	})
 

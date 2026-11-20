@@ -54,6 +54,10 @@ const (
 
 	// APIServiceName is the aggregated APIService that fronts the projectcalico.org/v3 API group.
 	APIServiceName = "v3.projectcalico.org"
+
+	// ConfigMapParamsAccessName names the ClusterRole and ClusterRoleBinding that let the API server
+	// read ConfigMaps used as ValidatingAdmissionPolicy params.
+	ConfigMapParamsAccessName = "calico-apiserver-vap-configmap-params"
 )
 
 const (
@@ -171,6 +175,11 @@ type APIServerConfiguration struct {
 	// HoldAPIServiceCutover leaves the previous API server in service, so its
 	// APIService and the resources it needs are left alone.
 	HoldAPIServiceCutover bool
+
+	// ConfigMapParamsAccess grants the API server cluster-wide read access to ConfigMaps. Its
+	// ValidatingAdmissionPolicy plugin watches the params of every bound policy cluster-wide, and
+	// readiness fails until that watch syncs.
+	ConfigMapParamsAccess bool
 }
 
 type apiServerComponent struct {
@@ -268,6 +277,12 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.RequiresAggregationServer {
 		// Include the aggregation API server objects.
 		globalObjects = append(globalObjects, aggregationAPIServerObjects...)
+
+		// Never queued for deletion: a running API server keeps the ConfigMap watch after the
+		// policy that needed it is gone, so revoking access would take it down again.
+		if c.cfg.ConfigMapParamsAccess {
+			globalObjects = append(globalObjects, c.configMapParamsClusterRole(), c.configMapParamsClusterRoleBinding())
+		}
 	} else {
 		// If we're not running an aggregation API server, we need to delete the objects that are only needed for it.
 		objsToDelete = append(objsToDelete, aggregationAPIServerObjects...)
@@ -745,6 +760,39 @@ func (c *apiServerComponent) authClusterRoleBinding() client.Object {
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
 			Name:     "calico-extension-apiserver-auth-access",
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+	}
+}
+
+func (c *apiServerComponent) configMapParamsClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: ConfigMapParamsAccessName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		},
+	}
+}
+
+func (c *apiServerComponent) configMapParamsClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: ConfigMapParamsAccessName},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      APIServerServiceAccountName,
+				Namespace: APIServerNamespace,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     ConfigMapParamsAccessName,
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}

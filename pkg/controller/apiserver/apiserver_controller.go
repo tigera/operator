@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	admregv1 "k8s.io/api/admissionregistration/v1"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -51,6 +52,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
+	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -143,6 +145,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 	if err = utils.AddSecretsWatch(c, webhooks.WebhooksTLSSecretName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch webhooks TLS secret: %w", err)
+	}
+
+	if servesValidatingAdmissionPolicyV1(opts) {
+		for _, obj := range []client.Object{&admregv1.ValidatingAdmissionPolicy{}, &admregv1.ValidatingAdmissionPolicyBinding{}} {
+			if err = c.WatchObject(obj, &handler.EnqueueRequestForObject{}); err != nil {
+				return fmt.Errorf("apiserver-controller failed to watch %T: %w", obj, err)
+			}
+		}
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
@@ -379,6 +389,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
+	// The API server only runs the ValidatingAdmissionPolicy plugin as an aggregation server.
+	var configMapParamsAccess bool
+	if !r.opts.UseV3CRDs && servesValidatingAdmissionPolicyV1(r.opts) {
+		configMapParamsAccess, err = needsConfigMapParamsAccess(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking ValidatingAdmissionPolicy params", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
 
@@ -397,6 +417,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		ClusterDomain:                r.opts.ClusterDomain,
 		RequiresAggregationServer:    !r.opts.UseV3CRDs,
 		HoldAPIServiceCutover:        holdCutover,
+		ConfigMapParamsAccess:        configMapParamsAccess,
 	}
 
 	var components []render.Component
@@ -521,6 +542,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+func servesValidatingAdmissionPolicyV1(opts options.ControllerOptions) bool {
+	return opts.APIDiscovery.ServedVersion(admission.APIGroup, admission.KindValidatingPolicy) == admission.VersionV1
 }
 
 func validateAPIServerResource(instance *operatorv1.APIServer) error {

@@ -61,6 +61,8 @@ const (
 	EsKubeControllerNetworkPolicyName   = networkpolicy.CalicoComponentPolicyPrefix + "es-kube-controller-access"
 	ManagedClustersWatchRoleBindingName = "es-calico-kube-controllers-managed-cluster-watch"
 
+	ocpFederationRoleBindingName = "calico-kube-controllers-endpoint-controller"
+
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
 	ElasticsearchKubeControllersSecureUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access-gateway"
@@ -299,11 +301,28 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	}
 
 	if c.cfg.Terminating {
-		objectsToDelete = append(objectsToDelete, objectsToCreate...)
+		for _, obj := range objectsToCreate {
+			if !isSharedBetweenDeployments(obj) {
+				objectsToDelete = append(objectsToDelete, obj)
+			}
+		}
 		objectsToCreate = nil
 	}
 
 	return objectsToCreate, objectsToDelete
+}
+
+// isSharedBetweenDeployments reports whether calico-kube-controllers and
+// es-calico-kube-controllers both render obj under the same name. The other deployment
+// keeps running while this one terminates, so these are left to garbage collection.
+func isSharedBetweenDeployments(obj client.Object) bool {
+	switch obj.(type) {
+	case *corev1.ServiceAccount:
+		return obj.GetName() == KubeControllerServiceAccount
+	case *rbacv1.ClusterRoleBinding:
+		return obj.GetName() == ManagedClustersWatchRoleBindingName || obj.GetName() == ocpFederationRoleBindingName
+	}
+	return false
 }
 
 func (c *kubeControllersComponent) Ready() bool {
@@ -527,7 +546,7 @@ func (c *kubeControllersComponent) controllersOCPFederationRoleBinding() *rbacv1
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   "calico-kube-controllers-endpoint-controller",
+			Name:   ocpFederationRoleBindingName,
 			Labels: map[string]string{},
 		},
 		RoleRef: rbacv1.RoleRef{

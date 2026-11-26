@@ -27,6 +27,7 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -108,6 +109,15 @@ func modifyImplementation(ri render.Inputs, cfg *gatewayapi.GatewayAPIImplementa
 		del = append(del, gatewayapi.GatewayNamespacesCRB(nil))
 	}
 
+	// MKE rejects privileged pods unless the requesting user is cluster-admin, and the
+	// envoy-gateway controller creates the proxy Deployment carrying the privileged
+	// l7-log-collector.
+	if ri.Installation.KubernetesProvider.IsDockerEE() {
+		create = append(create, envoyGatewayClusterAdminCRB())
+	} else {
+		del = append(del, envoyGatewayClusterAdminCRB())
+	}
+
 	image := gatewayAPIData(ri).l7LogCollectorImage
 	patched := 0
 	for _, o := range create {
@@ -146,6 +156,23 @@ func modifyImplementation(ri render.Inputs, cfg *gatewayapi.GatewayAPIImplementa
 	)
 
 	return create, del
+}
+
+func envoyGatewayClusterAdminCRB() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: gatewayapi.ComponentNameEnvoyGateway + "-cluster-admin"},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "cluster-admin",
+		},
+		Subjects: []rbacv1.Subject{{
+			Kind:      "ServiceAccount",
+			Name:      gatewayapi.ComponentNameEnvoyGateway,
+			Namespace: common.CalicoNamespace,
+		}},
+	}
 }
 
 // GatewayNamespaceObjects returns the WAF HTTP filter's per-namespace identity and the

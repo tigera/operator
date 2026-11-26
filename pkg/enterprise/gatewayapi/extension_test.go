@@ -136,6 +136,41 @@ var _ = Describe("Gateway API enterprise extension", func() {
 		Expect(proxies).To(Equal(3))
 	})
 
+	DescribeTable("binds envoy-gateway to cluster-admin only on MKE",
+		func(provider operatorv1.Provider, onMKE bool) {
+			gatewayComp := enterpriseComponent(&gatewayapi.GatewayAPIImplementationConfig{
+				Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, KubernetesProvider: provider},
+				GatewayAPI:   &operatorv1.GatewayAPI{},
+			})
+			objsToCreate, objsToDelete := gatewayComp.Objects()
+
+			findCRB := func(objs []client.Object) *rbacv1.ClusterRoleBinding {
+				for _, o := range objs {
+					if crb, ok := o.(*rbacv1.ClusterRoleBinding); ok && crb.Name == "envoy-gateway-cluster-admin" {
+						return crb
+					}
+				}
+				return nil
+			}
+
+			if !onMKE {
+				Expect(findCRB(objsToCreate)).To(BeNil())
+				Expect(findCRB(objsToDelete)).NotTo(BeNil())
+				return
+			}
+			crb := findCRB(objsToCreate)
+			Expect(crb).NotTo(BeNil())
+			Expect(findCRB(objsToDelete)).To(BeNil())
+			Expect(crb.RoleRef.Name).To(Equal("cluster-admin"))
+			Expect(crb.Subjects).To(ConsistOf(rbacv1.Subject{
+				Kind: "ServiceAccount", Name: "envoy-gateway", Namespace: common.CalicoNamespace,
+			}))
+		},
+		Entry("MKE", operatorv1.ProviderDockerEE, true),
+		Entry("generic", operatorv1.ProviderNone, false),
+		Entry("OpenShift", operatorv1.ProviderOpenShift, false),
+	)
+
 	It("panics when a GatewayClass has no EnvoyProxy to patch", func() {
 		cfg := &gatewayapi.GatewayAPIImplementationConfig{
 			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise},

@@ -1032,6 +1032,104 @@ var _ = Describe("apiserver controller tests", func() {
 		})
 	})
 
+	Context("ValidatingAdmissionPolicy ConfigMap params", func() {
+		servesVAPv1 := &common.VersionInfo{Major: 1, Minor: 35}
+
+		reconcileWith := func(useV3CRDs bool, v *common.VersionInfo) {
+			r := ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+				migrationWatchReady: &utils.ReadyFlag{},
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+					UseV3CRDs:           useV3CRDs,
+					KubernetesVersion:   v,
+				},
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+		}
+
+		createBoundPolicy := func(name, paramKind string) {
+			Expect(cli.Create(ctx, &admregv1.ValidatingAdmissionPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: name},
+				Spec: admregv1.ValidatingAdmissionPolicySpec{
+					ParamKind: &admregv1.ParamKind{APIVersion: "v1", Kind: paramKind},
+				},
+			})).To(Succeed())
+			Expect(cli.Create(ctx, &admregv1.ValidatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{Name: name + "-binding"},
+				Spec:       admregv1.ValidatingAdmissionPolicyBindingSpec{PolicyName: name},
+			})).To(Succeed())
+		}
+
+		expectAccess := func(granted bool) {
+			cr := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ConfigMapParamsAccessName}}
+			crb := &rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ConfigMapParamsAccessName}}
+			if !granted {
+				Expect(kerror.IsNotFound(test.GetResource(cli, cr))).To(BeTrue())
+				Expect(kerror.IsNotFound(test.GetResource(cli, crb))).To(BeTrue())
+				return
+			}
+			Expect(test.GetResource(cli, cr)).To(Succeed())
+			Expect(cr.Rules).To(ConsistOf(rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "list", "watch"},
+			}))
+			Expect(test.GetResource(cli, crb)).To(Succeed())
+			Expect(crb.Subjects).To(ConsistOf(rbacv1.Subject{
+				Kind:      "ServiceAccount",
+				Name:      render.APIServerServiceAccountName,
+				Namespace: render.APIServerNamespace,
+			}))
+		}
+
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, installation)).To(Succeed())
+		})
+
+		It("does not grant access when no bound policy takes a ConfigMap param", func() {
+			Expect(cli.Create(ctx, &admregv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: "unbound"},
+				Spec: admregv1.ValidatingAdmissionPolicySpec{ParamKind: &admregv1.ParamKind{APIVersion: "v1", Kind: "ConfigMap"}}})).To(Succeed())
+			createBoundPolicy("secret-param", "Secret")
+			reconcileWith(false, servesVAPv1)
+			expectAccess(false)
+		})
+
+		It("grants access when a bound policy takes a ConfigMap param", func() {
+			createBoundPolicy("clo-protected-sa-pods", "ConfigMap")
+			reconcileWith(false, servesVAPv1)
+			expectAccess(true)
+		})
+
+		It("keeps access after the policy and binding are removed", func() {
+			createBoundPolicy("clo-protected-sa-pods", "ConfigMap")
+			reconcileWith(false, servesVAPv1)
+			expectAccess(true)
+
+			Expect(cli.Delete(ctx, &admregv1.ValidatingAdmissionPolicyBinding{ObjectMeta: metav1.ObjectMeta{Name: "clo-protected-sa-pods-binding"}})).To(Succeed())
+			Expect(cli.Delete(ctx, &admregv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: "clo-protected-sa-pods"}})).To(Succeed())
+			reconcileWith(false, servesVAPv1)
+			expectAccess(true)
+		})
+
+		It("does not grant access before Kubernetes 1.30", func() {
+			createBoundPolicy("clo-protected-sa-pods", "ConfigMap")
+			reconcileWith(false, &common.VersionInfo{Major: 1, Minor: 29})
+			expectAccess(false)
+		})
+
+		It("does not grant access without an aggregation API server", func() {
+			createBoundPolicy("clo-protected-sa-pods", "ConfigMap")
+			reconcileWith(true, servesVAPv1)
+			expectAccess(false)
+		})
+	})
+
 	Context("API server cutover", func() {
 		var r ReconcileAPIServer
 

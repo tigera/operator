@@ -76,6 +76,7 @@ spec:
                                       type: string
                                     type: object
                                   nodeSelector:
+                                    maxLength: 1024
                                     type: string
                                 type: object
                               type: array
@@ -203,6 +204,7 @@ spec:
                                           type: string
                                         type: object
                                       nodeSelector:
+                                        maxLength: 1024
                                         type: string
                                     type: object
                                   type: array

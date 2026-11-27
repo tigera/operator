@@ -48,6 +48,7 @@ spec:
                     type: object
                   type: array
                 nodeSelector:
+                  maxLength: 1024
                   type: string
               type: object
           required:

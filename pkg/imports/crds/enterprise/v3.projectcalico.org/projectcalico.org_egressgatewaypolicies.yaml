@@ -41,8 +41,10 @@ spec:
                           maxNextHops:
                             type: integer
                           namespaceSelector:
+                            maxLength: 1024
                             type: string
                           selector:
+                            maxLength: 1024
                             type: string
                         type: object
                       gatewayPreference:

@@ -50,6 +50,7 @@ spec:
                   type: array
                 selector:
                   default: all()
+                  maxLength: 1024
                   type: string
                 startTime:
                   format: date-time

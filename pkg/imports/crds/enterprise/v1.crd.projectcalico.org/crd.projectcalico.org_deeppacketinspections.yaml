@@ -27,6 +27,7 @@ spec:
             spec:
               properties:
                 selector:
+                  maxLength: 1024
                   type: string
               type: object
             status:

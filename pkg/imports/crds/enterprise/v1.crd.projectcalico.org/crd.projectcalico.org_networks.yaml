@@ -47,6 +47,7 @@ spec:
                             x-kubernetes-list-type: atomic
                           nodeSelector:
                             default: ""
+                            maxLength: 1024
                             type: string
                           routeTableIndex:
                             format: int32

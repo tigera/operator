@@ -81,6 +81,8 @@ spec:
                     type: string
                   type: object
                 externalNetwork:
+                  maxLength: 253
+                  pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                   type: string
                 failureDetectionMode:
                   type: string
@@ -103,6 +105,8 @@ spec:
                 maxRestartTime:
                   type: string
                 network:
+                  maxLength: 253
+                  pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                   type: string
                 nextHopMode:
                   enum:

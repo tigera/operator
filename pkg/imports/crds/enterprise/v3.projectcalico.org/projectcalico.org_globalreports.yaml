@@ -61,20 +61,27 @@ spec:
                       properties:
                         names:
                           items:
+                            maxLength: 253
+                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                             type: string
                           type: array
                         selector:
+                          maxLength: 1024
                           type: string
                       type: object
                     selector:
+                      maxLength: 1024
                       type: string
                     serviceAccounts:
                       properties:
                         names:
                           items:
+                            maxLength: 253
+                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                             type: string
                           type: array
                         selector:
+                          maxLength: 1024
                           type: string
                       type: object
                   type: object
